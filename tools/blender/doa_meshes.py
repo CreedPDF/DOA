@@ -77,8 +77,9 @@ def stamp_attributes(objs, parts):
     """Write the part index and flag as face attributes so they survive joining."""
     for o in objs:
         me = o.data
-        pa = me.attributes.new("doa_part", "INT", "FACE")
-        fl = me.attributes.new("doa_flag", "INT", "FACE")
+        me.attributes.new("doa_part", "INT", "FACE")
+        me.attributes.new("doa_flag", "INT", "FACE")
+        pa, fl = me.attributes["doa_part"], me.attributes["doa_flag"]
         pi = parts.index(o["doa_part"])
         for k in range(len(me.polygons)):
             pa.data[k].value = pi
@@ -727,8 +728,9 @@ def build_fragments(assets, out, n=28):
     pivots = {}
     for o in pieces:
         me = o.data
-        pa = me.attributes.new("doa_part", "INT", "FACE")
-        fl = me.attributes.new("doa_flag", "INT", "FACE")
+        me.attributes.new("doa_part", "INT", "FACE")
+        me.attributes.new("doa_flag", "INT", "FACE")
+        pa, fl = me.attributes["doa_part"], me.attributes["doa_flag"]
         pi = parts.index(o["doa_part"])
         for poly in me.polygons:
             pa.data[poly.index].value = pi
