@@ -65,7 +65,7 @@ for name in ("planet", "ring"):
     if len(m["verts"]) % 8 or len(m["quads"]) % 4 or max(m["quads"]) >= nv:
         errors.append(f"space mesh {name}.json malformed")
     print(f"{name}.json: {nv} corners, {len(m['quads']) // 4} quads")
-for t in ("earth", "earth_clouds", "moon", "red", "red_cracks", "giant", "ring", "milkyway", "galaxy", "deepfield", "glare", "corona", "white"):
+for t in ("earth", "earth_clouds", "moon", "red", "red_cracks", "giant", "ring", "milkyway", "galaxy", "deepfield", "glare", "corona", "white", "earth_night", "sun"):
     if not (A / f"textures/space/{t}.png").exists():
         errors.append(f"space texture {t}.png missing")
 for pid in IDS:

@@ -146,6 +146,13 @@ def bump_normals(height, p, east, north, w, h, strength):
     return n / np.linalg.norm(n, axis=-1, keepdims=True)
 
 
+def hillshade(n, p, east, north, strength=1.0):
+    """Map-style relief shading: light from the upper left of every patch of ground, relative to a flat surface."""
+    l = -0.55 * east + 0.55 * north + 0.63 * p
+    l /= np.linalg.norm(l, axis=-1, keepdims=True)
+    return np.clip(1 + ((n * l).sum(-1) - (p * l).sum(-1)) * 6 * strength, 0.55, 1.35)
+
+
 def light(n_local, rot, wrap=0.0):
     sun_local = rot.T @ SUN
     d = n_local @ sun_local
@@ -190,6 +197,7 @@ def earth():
         cloud_a[r0:r1] = smooth(0.5, 0.76, c * band + 0.26 + storms)
     col_out = np.zeros((H, W, 3), np.float32)
     cl_out = np.zeros((H, W, 3), np.float32)
+    night_out = np.zeros((H, W, 3), np.float32)
     # the sun as seen from the earth's frame, projected for cloud shadows
     sun_local = EARTH_ROT.T @ SUN
     for r0, r1 in chunks(H):
@@ -226,43 +234,21 @@ def earth():
         ice = smooth(0.1, -0.02, temp + (fbm(p * 7, 71, 5) - 0.5) * 0.14)
         ice = np.maximum(ice, smooth(0.5, 0.85, mount[r0:r1]) * land * smooth(0.6, 0.3, temp))
         albedo = mix(albedo, snow, ice)
-        # relief lighting
+        # relief shading that reads at any sun angle (the game lights the sphere itself)
         n = bump_normals(np.where(land, e, 0) * 0.012, p, east, north, W, H, 1.0)
-        d_flat = p @ sun_local
-        d = n @ sun_local
-        diff = np.clip(d, 0, 1) ** 0.9
-        # cloud shadow: sample cloud cover a little toward the sun
-        tang_sun = sun_local[None, None, :] - d_flat[..., None] * p
-        su = (tang_sun * east).sum(-1)
-        sv = (tang_sun * north).sum(-1)
-        cols = (np.arange(W)[None, :] - (su * 14).astype(int)) % W
-        rows = np.clip(np.arange(r0, r1)[:, None] + (sv * 14).astype(int), 0, H - 1)
-        shadow = 1 - cloud_a[rows, cols] * 0.6
-        # dusk reddening and a little skylight on the day side
-        dusk = np.exp(-(d_flat / 0.12) ** 2) * (d_flat > -0.15)
-        lit = albedo * (diff * shadow)[..., None] * np.array([1.0, 0.97, 0.92]) + albedo * 0.035 * smooth(-0.1, 0.4, d_flat)[..., None]
-        lit = lit + dusk[..., None] * np.array([0.035, 0.012, 0.004]) * smooth(-0.1, 0.05, d_flat)[..., None]
-        # sun glint on the oceans (toward the main camera, which sits above the north-west limb)
-        view = np.array([0.0, 52.0, 10.0], np.float32)
-        view /= np.linalg.norm(view)
-        view_local = EARTH_ROT.T @ view
-        hv = sun_local + view_local
-        hv /= np.linalg.norm(hv)
-        spec = np.clip(p @ hv, 0, 1) ** 220 * 1.4 + np.clip(p @ hv, 0, 1) ** 30 * 0.12
-        lit = lit + (~land)[..., None] * spec[..., None] * np.array([1.0, 0.92, 0.8]) * smooth(0, 0.2, d_flat)[..., None]
-        # city lights on the night side
+        hs = hillshade(n, p, east, north, 1.6)
+        lit = albedo * hs[..., None]
+        col_out[r0:r1] = np.clip(lit, 0, 1) ** (1 / 1.05)
+        # city lights (drawn on the night side by the game)
         cities = fbm(p * 46, 101, 3) * fbm(p * 10, 102, 3)
         lights = smooth(0.30, 0.48, cities) * land * (1 - ice) * smooth(0.1, 0.45, temp) * smooth(0.0, 0.1, e) * smooth(0.45, 0.1, e)
-        night = smooth(0.05, -0.12, d_flat)
-        lit = lit + (lights * night)[..., None] * np.array([1.0, 0.68, 0.32]) * 0.95
-        col_out[r0:r1] = np.clip(lit, 0, 1) ** (1 / 1.1)
-        # clouds lit: bright tops, golden terminator, dark night
-        cd = np.clip(d_flat * 1.1 + 0.05, 0, 1)
-        cl = np.array([0.98, 0.98, 0.97]) * cd[..., None] + dusk[..., None] * np.array([0.14, 0.06, 0.02]) * (d_flat > -0.05)[..., None]
-        cl = cl * (0.82 + 0.25 * fbm(p * 40, 93, 3)[..., None])
+        night_out[r0:r1] = np.stack([lights, lights * 0.68, lights * 0.32], -1)
+        # clouds: bright tops, greyer thin edges
+        cl = np.array([0.97, 0.97, 0.98]) * (0.78 + 0.25 * fbm(p * 40, 93, 3)[..., None]) * (0.85 + 0.15 * cloud_a[r0:r1, :, None])
         cl_out[r0:r1] = np.clip(cl, 0, 1)
     save(col_out, "earth.png")
     save(cl_out, "earth_clouds.png", cloud_a * 0.95)
+    save(night_out, "earth_night.png")
 
 
 # ------------------------------------------------------------------------------------------ rocky bodies
@@ -302,11 +288,7 @@ def moon():
     base = 0.47 + 0.12 * (fbm(p * 5, 201, 6) - 0.5) + fbm(p * 80, 206, 3) * 0.06
     alb = base * (1 - 0.5 * maria) + rays * 0.12
     n = bump_normals(h, p, east, north, W, H, 1.0)
-    d, diff = light(n, MOON_ROT)
-    flat, _ = light(p, MOON_ROT)
-    # lunar regolith scatters light back toward the sun: flat-looking at full phase, crisp relief near the terminator
-    shade = np.clip(d, 0, 1) * 0.65 + np.clip(flat, 0, 1) * 0.35 * (d > 0)
-    lit = alb * shade + 0.004
+    lit = alb * hillshade(n, p, east, north, 2.5)
     col = np.stack([lit * 1.01, lit, lit * 0.97], -1)
     save(col, "moon.png")
 
@@ -328,10 +310,7 @@ def red():
     cap = smooth(0.78, 0.9, np.abs(lat) / (math.pi / 2) + (fbm(p * 8, 609, 4) - 0.5) * 0.12)
     alb = mix(alb, [0.92, 0.88, 0.84], cap)
     n = bump_normals(height, p, east, north, W, H, 1.0)
-    d, _ = light(n, RED_ROT)
-    flat, _ = light(p, RED_ROT)
-    dusk = np.exp(-(flat / 0.15) ** 2) * 0.05
-    lit = alb * np.clip(d, 0, 1)[..., None] ** 0.9 + alb * 0.02 + dusk[..., None] * np.array([1, 0.5, 0.3])
+    lit = alb * hillshade(n, p, east, north, 2.0)[..., None]
     save(lit, "red.png")
     # the fissures that open when the planet is broken: a glowing network (white, tinted molten in game)
     vor = np.zeros(lat.shape, np.float32)
@@ -384,10 +363,7 @@ def giant():
         col[m] = col[m] * (1 - sw[:, None] * 0.8) + tone * sw[:, None] * 0.8
     col *= (0.88 + 0.18 * fbm(p * 30, 307, 3))[..., None]
     col = mix(col, [0.52, 0.44, 0.38], smooth(0.78, 1.0, np.abs(lat) / (math.pi / 2)) * 0.6)
-    d, _ = light(p, GIANT_ROT)
-    limb = np.clip(d, 0, 1) ** 0.75
-    lit = col * limb[..., None] + col * 0.01
-    save(lit, "giant.png")
+    save(col, "giant.png")
     # ring: u = radius (inner -> outer)
     Wr = 2048
     r = np.linspace(0, 1, Wr)
@@ -531,6 +507,27 @@ def corona():
     save(np.clip(rgb, 0, 1), "corona.png")
 
 
+def sun():
+    """The sun's photosphere: boiling granulation, faculae and a few dark spots (limb darkening is done in game)."""
+    W, H = 1024, 512
+    p, lat, _, _ = grid(W, H)
+    gran = fbm(p * 60, 901, 3)
+    cells = 1 - np.abs(fbm(p * 22, 902, 4) * 2 - 1)
+    hot = 0.75 + 0.18 * gran + 0.12 * cells
+    rng = np.random.default_rng(903)
+    spots = np.zeros(lat.shape, np.float32)
+    for k in range(9):
+        la = rng.uniform(-0.5, 0.5)
+        lo = rng.uniform(0, 2 * math.pi)
+        c = np.array([math.cos(la) * math.sin(lo), math.sin(la), math.cos(la) * math.cos(lo)], np.float32)
+        d = np.arccos(np.clip(p @ c, -1, 1))
+        r = rng.uniform(0.01, 0.035)
+        spots = np.maximum(spots, smooth(r * 2.2, r * 0.6, d) * 0.55 + smooth(r * 0.8, r * 0.3, d) * 0.4)
+    v = hot * (1 - spots)
+    rgb = np.stack([np.clip(v * 1.05, 0, 1), np.clip(v * 0.82, 0, 1), np.clip(v * 0.5, 0, 1)], -1)
+    save(rgb, "sun.png")
+
+
 def white():
     save(np.ones((4, 4, 3), np.float32), "white.png")
 
@@ -539,7 +536,7 @@ if __name__ == "__main__":
     import sys
     want = sys.argv[1:]
     for name, fn in [("earth", earth), ("moon", moon), ("red", red), ("giant", giant), ("milkyway", milkyway), ("galaxy", galaxy),
-                     ("deepfield", deepfield), ("glare", glare), ("corona", corona), ("white", white)]:
+                     ("deepfield", deepfield), ("glare", glare), ("corona", corona), ("sun", sun), ("white", white)]:
         if want and name not in want:
             continue
         print(name, flush=True)

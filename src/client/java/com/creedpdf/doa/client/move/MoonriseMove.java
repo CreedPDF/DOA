@@ -49,7 +49,7 @@ public final class MoonriseMove implements Move {
         if (n > 0.01f) {
             Vector3f to = new Vector3f((float) -d.x, (float) -d.y, (float) -d.z);
             Kit.glow(c, m, 70, 0.22f * n, 0.21f * n, 0.19f * n);
-            Cosmos.planet(c.cosmos, Cosmos.Body.MOON, new Vector3f((float) m.x, (float) m.y, (float) m.z), 21, Cosmos.facing(Cosmos.Body.MOON, to), n);
+            Cosmos.planet(c.cosmos, Cosmos.Body.MOON, new Vector3f((float) m.x, (float) m.y, (float) m.z), 21, Cosmos.MOON_Q, n, Cosmos.gibbous(to, 0.45));
         }
         double t = a - MOON_TOLL;
         if (t > 0) {

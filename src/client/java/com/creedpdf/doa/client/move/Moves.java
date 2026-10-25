@@ -17,6 +17,7 @@ public final class Moves {
     /** True while the caller's camera is inside a private pocket scene (the world is not drawn there). */
     public static boolean inPocket(int i, double a) {
         return switch (i) {
+            case DEATH -> EclipseMove.pocket(a);
             case REDEMPTION -> a >= DAWN_UP && a < DAWN_DOWN;
             case WRATH -> a >= BRK_UP && a < BRK_DOWN;
             case SOUL -> a >= HRT_DOWN && a < HRT_UP;

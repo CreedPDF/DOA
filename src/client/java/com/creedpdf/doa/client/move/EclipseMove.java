@@ -7,6 +7,7 @@ import com.creedpdf.doa.client.cine.Cutscene;
 import com.creedpdf.doa.client.render.AbilityView;
 import com.creedpdf.doa.client.render.Bill;
 import com.creedpdf.doa.client.render.Cosmos;
+import com.creedpdf.doa.client.render.Universe;
 import com.creedpdf.doa.client.text.DoaFont;
 import com.creedpdf.doa.entity.ArmoryCoreEntity;
 import net.minecraft.client.gui.DrawContext;
@@ -23,6 +24,8 @@ import static com.creedpdf.doa.Abilities.*;
 /**
  * 死 ECLIPSE. The sky darkens to a bloody dusk while the moon slides across the sun; at totality the corona flares
  * around a black sun, the diamond ring flashes, and the black sun weeps crimson light down onto every enemy in turn.
+ * Midway the camera tears up out of the sky into orbit and pulls back to watch the moon's shadow - a black spot ringed
+ * by dusk, city lights blinking on inside it - sweep across the face of the turning world.
  */
 public final class EclipseMove implements Move {
     private static final int I = DEATH;
@@ -30,6 +33,54 @@ public final class EclipseMove implements Move {
     static final Vec3d SUN_DIR = new Vec3d(0.35, 0.6, -0.72).normalize();
     private static final Vec3d SIDE = SUN_DIR.crossProduct(new Vec3d(0, 1, 0)).normalize();
     private static final Vec3d UP = SIDE.crossProduct(SUN_DIR).normalize();
+    /** The orbital interlude (a private pocket scene). */
+    public static final int ECL_SPACE = 150, ECL_BACK = 250;
+    static final double POCKET = 300;
+    private static final Vec3d EY = new Vec3d(0, 1, 0);
+    private static final Vec3d U_SUN = Universe.SUN_DIR;
+    private static final Vec3d U_TERM = U_SUN.crossProduct(EY).normalize();
+
+    private static Vec3d umbraAt(double k) {
+        return U_SUN.add(U_TERM.multiply(0.3 - 0.6 * k)).add(EY.multiply(0.1 - 0.2 * k)).normalize();
+    }
+
+    /** {universe camera, look direction} for the interlude. */
+    private static Vec3d[] spacePath(double a) {
+        double k = Rite.clamp01((a - ECL_SPACE) / (double) (ECL_BACK - ECL_SPACE));
+        double e = 1 - Math.pow(1 - k, 2.4);
+        double D = 1.045 * Math.pow(4.8 / 1.045, e);
+        Vec3d d0 = U_SUN.add(U_TERM.multiply(0.62)).add(EY.multiply(0.2)).normalize();
+        Vec3d d1 = U_SUN.multiply(0.55).add(U_TERM.multiply(0.8)).add(EY.multiply(0.32)).normalize();
+        Vec3d dir = Kit.lerp(d0, d1, Kit.s(k)).normalize();
+        Vec3d cam = dir.multiply(D);
+        Vec3d tgt = Kit.lerp(umbraAt(k), Vec3d.ZERO, Kit.s(k * 1.4));
+        return new Vec3d[]{cam, tgt.subtract(cam).normalize()};
+    }
+
+    public static boolean pocket(double a) {
+        return a >= ECL_SPACE && a < ECL_BACK;
+    }
+
+    private void space(MoveCtx c, double a) {
+        double k = Rite.clamp01((a - ECL_SPACE) / (double) (ECL_BACK - ECL_SPACE));
+        Vec3d[] p = spacePath(a);
+        double time = a * 0.6;
+        Universe.View v = new Universe.View(p[0], Vec3d.ZERO, time, c.cam);
+        Cosmos.blackout(c.cosmos, 94);
+        Cosmos.skybox(c.cosmos, Cosmos.MILKY, 90, 0.8f, new org.joml.Quaternionf().rotateY(0.6f));
+        Cosmos.stars(c.cosmos, 86, 1);
+        Vec3d sp = c.cam.add(U_SUN.multiply(84));
+        Universe.sunAt(c.cosmos, (float) sp.x, (float) sp.y, (float) sp.z, 2.4f, c.time);
+        Vec3d mU = U_SUN.multiply(Universe.MOON_DIST).add(U_TERM.multiply(-0.3 + 0.6 * k));
+        double[] qm = v.place(mU);
+        float rm = (float) (Universe.MOON_R * v.scale * qm[3]);
+        Universe.body(c.cosmos, Cosmos.MOON, (float) qm[0], (float) qm[1], (float) qm[2], rm, Cosmos.MOON_Q, U_SUN, new float[]{1, 1, 1}, 0.85f, null, 0);
+        double[] qe = v.place(Vec3d.ZERO);
+        Universe.umbra = umbraAt(k);
+        Universe.umbraR = 0.075f;
+        Universe.earth(c.cosmos, (float) qe[0], (float) qe[1], (float) qe[2], (float) (v.scale * qe[3]), Universe.earthRot(time), U_SUN, time);
+        Universe.umbra = null;
+    }
 
     /** Angular offset of the moon from the sun (0 at totality). */
     private static double offset(double a) {
@@ -49,6 +100,10 @@ public final class EclipseMove implements Move {
     @Override
     public void render(MoveCtx c) {
         double a = c.a;
+        if (c.mine && pocket(a)) {
+            space(c, a);
+            return;
+        }
         float dk = dark(a);
         Kit.skyTint(c, 88, 0.06f, 0.0f, 0.012f, dk * 0.86f);
         // sun and moon hang at infinity: drawn around the viewer's camera
@@ -83,7 +138,7 @@ public final class EclipseMove implements Move {
         }
         // the moon, seen from its night side: a black disc with the faintest earthshine
         Vector3f mc = new Vector3f((float) moon.x, (float) moon.y, (float) moon.z);
-        Cosmos.planet(c.cosmos, Cosmos.Body.MOON, mc, 4.6f, Cosmos.facing(Cosmos.Body.MOON, SUN_DIR.toVector3f()), 0.06f);
+        Cosmos.planet(c.cosmos, Cosmos.Body.MOON, mc, 4.6f, Cosmos.MOON_Q, 1f, SUN_DIR);
 
         // judgement
         float[] col = Pillars.COLOR[I];
@@ -129,6 +184,7 @@ public final class EclipseMove implements Move {
                         0, 0.05, 0, col, 0.12f, 24);
         }
         if (a == ECL_TOTAL) Cutscene.addShake(core, 1.2f, 40);
+        if (a == ECL_SPACE) Kit.privateSound(core, com.creedpdf.doa.registry.DoaSounds.FATE_SPACE, 0.7f);
     }
 
     @Override
@@ -137,6 +193,11 @@ public final class EclipseMove implements Move {
         double R = Rite.ORB_RADIUS;
         float base = Kit.baseYaw(playerYaw);
         if (a < 40) return Kit.relicShot(core, I, a);
+        if (a >= ECL_SPACE - 30 && a < ECL_SPACE) return Kit.ascent(c, (a - ECL_SPACE + 30) / 30.0);
+        if (pocket(a)) {
+            Vec3d s = c.add(0, POCKET, 0);
+            return new Vec3d[]{s, s.add(spacePath(a)[1].multiply(10))};
+        }
         if (a < 150) {
             Vec3d pos = Kit.orbit(c, base, R + 16, 2.6);
             return new Vec3d[]{pos, Kit.lerp(c.add(0, 8, 0), pos.add(SUN_DIR.multiply(50)), Kit.s((a - 50) / 70.0))};
@@ -156,6 +217,10 @@ public final class EclipseMove implements Move {
     @Override
     public void hud(DrawContext ctx, ArmoryCoreEntity core, float a, int w, int h) {
         Kit.title(ctx, I, TITLE[I], LINE[I], a, w, h);
+        Kit.fade(ctx, w, h, Kit.window(a, ECL_SPACE - 8, 8, ECL_SPACE, 10), 0xFFF4F0);
+        Kit.fade(ctx, w, h, Kit.window(a, ECL_BACK - 10, 10, ECL_BACK, 12), 0x000000);
+        Kit.caption(ctx, "影 · THE SHADOW OF THE MOON", "it falls across the world", Pillars.rgb(I), Kit.window(a, ECL_SPACE + 20, 14, ECL_BACK - 24, 12), w, h,
+                h * 0.16f);
         float tot = Kit.window(a, ECL_TOTAL - 6, 14, ECL_TOTAL + 50, 14);
         Kit.caption(ctx, "日蝕 · THE BLACK SUN", "and the black sun weeps", Pillars.rgb(I), tot, w, h, h * 0.18f);
         float dk = dark(a);

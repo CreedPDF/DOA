@@ -308,13 +308,14 @@ def s_descend():
 
 
 def s_impact():
-    out = canvas(5.0)
-    put(out, taiko(48, 3.0, 1.4), 0.0, 1.4)
-    put(out, taiko(60, 2.5, 1.0), 0.14, 0.9)
-    put(out, earth(3.5), 0.0, 1.0)
-    put(out, bonsho(146, 4.5, 0.4), 0.02, 0.6)
+    # a single heavy blow that rings out and is gone before the next star appears
+    out = canvas(3.2)
+    put(out, taiko(46, 2.4, 1.5), 0.0, 1.5)
+    put(out, earth(2.2), 0.0, 1.0)
+    put(out, bonsho(146, 2.6, 0.4), 0.02, 0.45)
     put(out, hyoshigi(), 0.0, 0.5)
-    return hall(out, 1.4, 0.4)
+    t = t_of(3.2)
+    return hall(out * np.clip((3.2 - t) / 1.2, 0, 1), 1.1, 0.32)
 
 
 def s_reveal():
