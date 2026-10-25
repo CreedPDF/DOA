@@ -389,6 +389,14 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
             }
             double eTop = Math.max(e0, e1);
             float u0 = (float) j / cols * 10, u1 = (float) (j + 1) / cols * 10;
+            // a skirt below the rim so uneven ground never leaves a gap to the world outside
+            if (Math.min(e0, e1) > 4) {
+                float x0 = (float) (Math.sin(a0) * R), z0 = (float) (-Math.cos(a0) * R), x1 = (float) (Math.sin(a1) * R), z1 = (float) (-Math.cos(a1) * R);
+                vtx(skin, m, en, x0, -7f, z0, u0, -0.3f + flow, 1, 1, 1, 1, FULL, 0, 1, 0);
+                vtx(skin, m, en, x1, -7f, z1, u1, -0.3f + flow, 1, 1, 1, 1, FULL, 0, 1, 0);
+                vtx(skin, m, en, x1, 0f, z1, u1, flow, 1, 1, 1, 1, FULL, 0, 1, 0);
+                vtx(skin, m, en, x0, 0f, z0, u0, flow, 1, 1, 1, 1, FULL, 0, 1, 0);
+            }
             for (double lat = 0; lat < eTop; lat += BAND) {
                 double l1 = Math.min(lat + BAND, eTop);
                 double la0 = Math.min(lat, e0), la1 = Math.min(lat, e1);

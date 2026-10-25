@@ -595,10 +595,12 @@ def build_space(assets, out, render):
     # the world below
     planet.scale = (6, 6, 6)
     planet.location = (0, 0, -7.2)
+    planet.rotation_euler = (math.radians(62), 0, math.radians(30))
     planet.data.materials.append(image_mat("earth", os.path.join(tex, "earth.png"), os.path.join(tex, "earth_night.png"), emit_strength=0.6))
     clouds = make_planet("clouds", 96, 48)
     clouds.scale = (6.06, 6.06, 6.06)
     clouds.location = planet.location
+    clouds.rotation_euler = planet.rotation_euler
     clouds.data.materials.append(image_mat("clouds", os.path.join(tex, "earth_clouds.png"), alpha=True, roughness=1.0))
     moon = make_planet("moon", 64, 32)
     moon.scale = (0.7, 0.7, 0.7)
