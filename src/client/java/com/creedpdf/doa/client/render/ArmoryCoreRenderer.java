@@ -222,7 +222,7 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         }
 
         // ---- the name: the kanji and the word, in DOA's own lettering
-        double nameAt = after - 6;
+        double nameAt = after - 22;
         if (landed && nameAt > 0) {
             float a = Rite.smooth(nameAt / 12.0);
             if (rel >= 0) a *= 1 - Rite.smooth(rel / 25.0);

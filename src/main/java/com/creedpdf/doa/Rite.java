@@ -10,8 +10,8 @@ public final class Rite {
     /** How high the falling star hangs before it plunges (so far up it reads as a star). */
     public static final double FALL_HEIGHT = 320.0;
 
-    public static final int LEAD = 40;
-    public static final int SLOT = 36;
+    public static final int LEAD = 110;
+    public static final int SLOT = 66;
     /** Ticks a pillar spends as a flickering star before it plunges, then the plunge itself. */
     public static final int STAR = 26;
     public static final int PLUNGE = 8;

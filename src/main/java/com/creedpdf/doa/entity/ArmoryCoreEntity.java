@@ -282,7 +282,7 @@ public class ArmoryCoreEntity extends Entity {
                 plantPillar(sw, i);
                 strike(sw, b);
             }
-            if (t == Rite.land(i) + 6) play(DoaSounds.REVEAL, b.add(0, 9, 0), 3f, Pillars.pitch(i));
+            if (t == Rite.land(i) + 22) play(DoaSounds.REVEAL, b.add(0, 16, 0), 3f, Pillars.pitch(i));
         }
         if (t == Rite.SEAL) {
             play(DoaSounds.SEAL, c, 4f, 1f);
@@ -297,7 +297,7 @@ public class ArmoryCoreEntity extends Entity {
         }
         if (t == Rite.SEALED) play(DoaSounds.ORB_CLOSE, c.add(0, 4, 0), 8f, 1f);
         if (t > Rite.SEALED) {
-            if ((t - Rite.SEALED) % 130 == 20) play(DoaSounds.ORB_HUM, c.add(0, 3, 0), 2.5f, 1f);
+            if ((t - Rite.SEALED) % 300 == 40) play(DoaSounds.ORB_HUM, c.add(0, 3, 0), 2.5f, 1f);
             for (int i = 0; i < Pillars.COUNT; i++)
                 if (t == Rite.relicAppear(i)) play(DoaSounds.RELIC, pillarBase(i).add(0, 3, 0), 2f, Pillars.pitch(i));
             if (t % 20 == 0) placeShell(sw, 95);

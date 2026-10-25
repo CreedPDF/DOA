@@ -228,7 +228,7 @@ public final class Cutscene {
             alpha = Rite.smooth((t - 6) / 10.0) * (1 - Rite.smooth((t - Rite.spawn(0) + 8) / 8.0));
         } else if (t < Rite.SEAL) {
             int i = MathHelper.clamp((int) Math.floor((t - Rite.spawn(0) + 2) / Rite.SLOT), 0, Pillars.COUNT - 1);
-            float u = t - Rite.land(i) - 4;
+            float u = t - Rite.land(i) - 20;
             if (u > 0) {
                 big = Pillars.KANJI[i];
                 small = Pillars.NAME[i];

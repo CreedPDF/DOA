@@ -8,6 +8,7 @@ import com.creedpdf.doa.client.model.DoaModels;
 import com.creedpdf.doa.client.render.AbilityView;
 import com.creedpdf.doa.client.render.Bill;
 import com.creedpdf.doa.client.render.Cosmos;
+import com.creedpdf.doa.client.render.Universe;
 import com.creedpdf.doa.entity.ArmoryCoreEntity;
 import com.creedpdf.doa.registry.DoaSounds;
 import net.minecraft.client.gui.DrawContext;
@@ -55,6 +56,20 @@ public final class BreakerMove implements Move {
     }
 
     private static final float[] MAGMA = {1.0f, 0.42f, 0.1f};
+    private static final int DEBRIS = 1400;
+    private static final float[] DB = new float[DEBRIS * 5];
+
+    static {
+        java.util.Random r = new java.util.Random(55);
+        for (int k = 0; k < DEBRIS; k++) {
+            Vector3f d = new Vector3f((float) r.nextGaussian(), (float) r.nextGaussian() * 0.7f, (float) r.nextGaussian()).normalize();
+            DB[k * 5] = d.x;
+            DB[k * 5 + 1] = d.y;
+            DB[k * 5 + 2] = d.z;
+            DB[k * 5 + 3] = (float) (0.3 + Math.pow(r.nextDouble(), 0.6) * 1.6);
+            DB[k * 5 + 4] = r.nextFloat();
+        }
+    }
 
     @Override
     public void render(MoveCtx c) {
@@ -121,9 +136,9 @@ public final class BreakerMove implements Move {
         Cosmos.blackout(c.cosmos, 92);
         Cosmos.skybox(c.cosmos, Cosmos.MILKY, 88, 0.9f, new Quaternionf().rotateY(0.6f));
         Cosmos.stars(c.cosmos, 80, 1);
-        Vec3d sunP = c.cam.add(new Vec3d(Cosmos.SUN.x, Cosmos.SUN.y, Cosmos.SUN.z).multiply(80));
-        Cosmos.sun(c.cosmos, sunP.x, sunP.y, sunP.z, 26, 1);
-        Cosmos.planet(c.cosmos, Cosmos.Body.EARTH, v(s.add(EARTH)), EARTH_R, Cosmos.EARTH_Q, 1);
+        Vec3d sunP = c.cam.add(new Vec3d(Cosmos.SUN.x, Cosmos.SUN.y, Cosmos.SUN.z).multiply(82));
+        Universe.sunAt(c.cosmos, (float) sunP.x, (float) sunP.y, (float) sunP.z, 2.6f, c.time);
+        Cosmos.planet(c.cosmos, Cosmos.Body.EARTH, v(s.add(EARTH)), EARTH_R, new Quaternionf(Cosmos.EARTH_Q).rotateY((float) (a * 0.0008)), 1);
         Vec3d red = s.add(RED);
         // ---- the spear: seven lights rise off the world and forge together
         Vec3d forge = s.add(FORGE);
@@ -187,6 +202,18 @@ public final class BreakerMove implements Move {
                     c.ms.pop();
                 }
             }
+            // a storm of glowing debris and dust thrown out in every direction
+            VertexConsumer ev = c.vcp.getBuffer(RenderLayer.getEyes(Cosmos.STAR));
+            VertexConsumer dv = c.vcp.getBuffer(RenderLayer.getEyes(Kit.HALO));
+            for (int k = 0; k < DEBRIS; k++) {
+                Vec3d d = new Vec3d(DB[k * 5], DB[k * 5 + 1], DB[k * 5 + 2]);
+                double travel = RED_R * (1 + (1 - Math.exp(-t * 4)) * DB[k * 5 + 3] * 2.4 + t * DB[k * 5 + 3] * 1.2);
+                Vec3d q = red.add(d.multiply(travel));
+                float heat = (float) Math.max(0, 1 - t * (0.6 + DB[k * 5 + 4]));
+                float sz = 0.18f + DB[k * 5 + 4] * 0.5f;
+                Bill.sprite(ev, c.ms, q.x, q.y, q.z, sz, 0, MAGMA[0] * heat * 1.4f, MAGMA[1] * heat * 1.2f, MAGMA[2] * heat + 0.02f);
+                if (k % 6 == 0) Bill.sprite(dv, c.ms, q.x, q.y, q.z, sz * 7, 0, 0.25f * heat, 0.08f * heat, 0.03f * heat);
+            }
             // the molten heart, the flash and the shockwave
             float core = (float) Math.exp(-(a - BRK_SHATTER) / 30.0);
             Kit.glow(c, red, RED_R * (0.9f + (1 - core) * 1.5f), MAGMA[0] * core * 1.5f, MAGMA[1] * core * 1.2f, MAGMA[2] * core);
@@ -216,9 +243,9 @@ public final class BreakerMove implements Move {
         }
         if (a == BRK_SHATTER) {
             Kit.privateSound(core, DoaSounds.VOID_COLLAPSE, 0.75f);
-            Kit.privateSound(core, DoaSounds.FATE_STRIKE, 0.7f);
             Cutscene.impact(core, I, 2.6f);
         }
+        if (a == BRK_SHATTER + 22) Kit.privateSound(core, DoaSounds.FATE_STRIKE, 0.7f);
         List<Vec3d> pts = AbilityView.points(core);
         for (int k = 0; k < pts.size(); k++) {
             if (a == meteorHit(k)) {
@@ -243,9 +270,15 @@ public final class BreakerMove implements Move {
             Vec3d s = c.add(0, POCKET, 0);
             Vec3d pos = s.add(-2, 1, 4 - (a - BRK_UP) * 0.018);
             Vec3d limb = s.add(4, -22, -40), red = s.add(RED), forge = s.add(FORGE);
+            // the pull-back: from skimming the clouds to high orbit, the world turning into a sphere below
+            double pk = Rite.clamp01((a - BRK_UP) / 80.0);
+            double ease = 1 - Math.pow(1 - pk, 3);
+            Vec3d skim = s.add(EARTH).add(new Vec3d(0.05, 1, 0.12).normalize().multiply(EARTH_R + 0.9));
+            pos = Kit.lerp(skim, pos, ease);
             Vec3d look;
-            if (a < BRK_GATHER) look = Kit.lerp(limb, forge, Kit.s((a - BRK_UP - 20) / 40.0));
-            else if (a < BRK_LAUNCH) look = Kit.lerp(forge, Kit.lerp(forge, red, 0.5), Kit.s((a - BRK_GATHER) / 100.0));
+            if (a < BRK_UP + 80) look = Kit.lerp(skim.add(0, -0.5, -30), limb, Kit.s(pk * 1.2));
+            else if (a < BRK_UP + 110) look = Kit.lerp(limb, forge, Kit.s((a - BRK_UP - 80) / 30.0));
+            else if (a < BRK_LAUNCH) look = Kit.lerp(forge, Kit.lerp(forge, red, 0.5), Kit.s((a - BRK_UP - 110) / (BRK_LAUNCH - BRK_UP - 110.0)));
             else look = Kit.lerp(Kit.lerp(forge, red, 0.5), red, Kit.s((a - BRK_LAUNCH) / 40.0));
             return new Vec3d[]{pos, look};
         }

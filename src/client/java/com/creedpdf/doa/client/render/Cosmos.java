@@ -165,43 +165,29 @@ public final class Cosmos {
         return new Quaternionf().rotationTo(lit, new Vector3f(toViewer).normalize());
     }
 
-    /**
-     * Draw a planet with its baked lighting. {@code rot} is the full orientation (baseRot for the scene's sun);
-     * k dims it (1 = as baked). Earth gets its clouds and atmosphere.
-     */
+    public static final Vec3d SUN_D = new Vec3d(SUN.x, SUN.y, SUN.z);
+
+    /** Draw a planet lit by the scene's sun. k scales its brightness. */
     public static void planet(Ctx c, Body b, Vector3f center, float radius, Quaternionf rot, float k) {
-        DoaMesh s = sphere();
-        if (s == null) return;
-        s.render(c.ms, c.vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(texture(b))), center, radius, rot, Bill.FULL, 0, false,
-                (x, y, z, nx, ny, nz, u, v, o) -> set(o, k, k, k, 1));
-        if (b == Body.EARTH) {
-            s.render(c.ms, c.vcp.getBuffer(RenderLayer.getEntityTranslucent(CLOUDS)), center, radius * 1.008f, rot, Bill.FULL, 0, false,
-                    (x, y, z, nx, ny, nz, u, v, o) -> set(o, k, k, k, 1));
-            atmosphere(c, center, radius * 1.03f, rot, new float[]{0.42f, 0.66f, 1f}, k);
-        } else if (b == Body.RED) {
-            atmosphere(c, center, radius * 1.02f, rot, new float[]{0.9f, 0.5f, 0.3f}, k * 0.45f);
-        } else if (b == Body.GIANT) {
-            atmosphere(c, center, radius * 1.01f, rot, new float[]{0.95f, 0.8f, 0.55f}, k * 0.35f);
+        planet(c, b, center, radius, rot, k, SUN_D);
+    }
+
+    /** Draw a planet lit from {@code light} (unit vector from the planet toward its sun): real terminator and phase. */
+    public static void planet(Ctx c, Body b, Vector3f center, float radius, Quaternionf rot, float k, Vec3d light) {
+        float[] t = {k, k, k};
+        switch (b) {
+            case EARTH -> Universe.earth(c, center.x, center.y, center.z, radius, rot, light, c.time);
+            case MOON -> Universe.body(c, MOON, center.x, center.y, center.z, radius, rot, light, t, 0.85f, null, 0);
+            case RED -> Universe.body(c, RED, center.x, center.y, center.z, radius, rot, light, t, 1f, new float[]{0.95f, 0.5f, 0.3f}, 0.55f * k);
+            case GIANT -> Universe.body(c, GIANT, center.x, center.y, center.z, radius, rot, light, t, 1f, new float[]{0.95f, 0.8f, 0.55f}, 0.4f * k);
         }
     }
 
-    /** A thin glowing limb: brightest at grazing angles on the day side. */
-    public static void atmosphere(Ctx c, Vector3f center, float radius, Quaternionf rot, float[] col, float k) {
-        DoaMesh s = sphere();
-        if (s == null || k <= 0.01f) return;
-        Vector3f cv = c.camv();
-        float sx = SUN.x, sy = SUN.y, sz = SUN.z;
-        s.render(c.ms, c.vcp.getBuffer(RenderLayer.getEyes(WHITE)), center, radius, rot, Bill.FULL, 0, false,
-                (x, y, z, nx, ny, nz, u, v, o) -> {
-                    float vx = x - cv.x, vy = y - cv.y, vz = z - cv.z;
-                    float len = (float) Math.sqrt(vx * vx + vy * vy + vz * vz);
-                    float f = 1 - Math.abs((nx * vx + ny * vy + nz * vz) / len);
-                    float d = nx * sx + ny * sy + nz * sz;
-                    float day = MathHelper.clamp((d + 0.2f) * 1.6f, 0, 1);
-                    float a = f * f * f * (0.08f + 0.92f * day) * k;
-                    float dusk = Math.max(0, 1 - Math.abs(d) * 4) * 0.6f;
-                    set(o, a * (col[0] + dusk), a * (col[1] + dusk * 0.3f), a * col[2], 1);
-                });
+    /** A light direction that shows a body almost full from {@code toViewer}, with a sliver of shadow on one side. */
+    public static Vec3d gibbous(Vector3f toViewer, double side) {
+        Vec3d t = new Vec3d(toViewer.x, toViewer.y, toViewer.z).normalize();
+        Vec3d s = t.crossProduct(new Vec3d(0, 1, 0)).normalize();
+        return t.add(s.multiply(side)).add(0, 0.15, 0).normalize();
     }
 
     /** The giant's rings, with the planet's shadow falling across them. */

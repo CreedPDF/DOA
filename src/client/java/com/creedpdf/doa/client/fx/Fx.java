@@ -76,7 +76,7 @@ public final class Fx {
     private static void events(ArmoryCoreEntity core, int t, Random rnd) {
         for (int i = 0; i < Pillars.COUNT; i++) {
             if (t == Rite.land(i)) impact(core, i, rnd);
-            if (t == Rite.land(i) + 6) reveal(core, i, rnd);
+            if (t == Rite.land(i) + 22) reveal(core, i, rnd);
             if (t == Rite.relicAppear(i)) relicBurst(core, i, rnd);
         }
         if (t == Rite.SEAL) {

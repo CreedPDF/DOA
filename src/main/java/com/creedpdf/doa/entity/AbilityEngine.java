@@ -219,7 +219,7 @@ public class AbilityEngine {
             int hit = Abilities.eclipseStrike(k);
             LivingEntity e = living(sw, targets.get(k));
             if (e == null) continue;
-            if (a == hit - 10) play(DoaSounds.SPEAR, e.getPos(), 3f, 0.7f);
+            if (a == hit - 10 && k % 4 == 0) play(DoaSounds.SPEAR, e.getPos(), 3f, 0.7f);
             if (a == hit) {
                 damage(sw, e, Math.max(e.getMaxHealth() * 4f, 200f));
                 area(sw, owner, e.getPos(), 3, 12, 0.8, 0);
@@ -264,9 +264,9 @@ public class AbilityEngine {
         for (int k = 0; k < points.size(); k++) {
             int hit = Abilities.meteorHit(k);
             Vec3d p = points.get(k);
-            if (a == hit - 12) play(DoaSounds.SPEAR, p, 5f, 0.8f + (k % 5) * 0.05f);
+            if (a == hit - 12 && k % 4 == 0) play(DoaSounds.SPEAR, p, 5f, 0.8f + (k % 5) * 0.05f);
             if (a == hit) {
-                play(DoaSounds.IMPACT, p, 5f, 0.8f + (k % 4) * 0.06f);
+                if (k % 3 == 0) play(DoaSounds.IMPACT, p, 5f, 0.8f + (k % 4) * 0.06f);
                 area(sw, owner, p, 4.5, 20, 1.2, 6);
             }
         }
