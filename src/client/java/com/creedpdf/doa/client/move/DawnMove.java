@@ -70,7 +70,19 @@ public final class DawnMove implements Move {
             Vec3d s = new Vec3d(0, POCKET, 0);
             Cosmos.backdrop(c.cosmos, 92, new float[]{0.09f, 0.07f, 0.2f}, new float[]{1.0f, 0.6f, 0.32f}, new float[]{0.4f, 0.28f, 0.3f});
             Vec3d sunP = c.cam.add(SUN.multiply(84));
-            Cosmos.sun(c.cosmos, sunP.x, sunP.y, sunP.z, 34, 1.2f);
+            Cosmos.sun(c.cosmos, sunP.x, sunP.y, sunP.z, 34, 1.0f);
+            com.creedpdf.doa.client.render.Universe.sunAt(c.cosmos, (float) sunP.x, (float) sunP.y, (float) sunP.z, 4.2f, c.time);
+            // crepuscular rays fanning out of the sun across the sky
+            VertexConsumer rays = c.vcp.getBuffer(RenderLayer.getEyes(Kit.COLUMN));
+            Vec3d rs = SUN.crossProduct(new Vec3d(0, 1, 0)).normalize(), ru = rs.crossProduct(SUN).normalize();
+            for (int k = 0; k < 18; k++) {
+                double ang = k / 18.0 * Math.PI * 2 + Math.sin(c.time * 0.004 + k) * 0.05;
+                Vec3d dir = rs.multiply(Math.cos(ang)).add(ru.multiply(Math.sin(ang)));
+                float rk = (0.12f + 0.1f * (float) Math.sin(c.time * 0.03 + k * 2.1)) * (k % 3 == 0 ? 1.6f : 1f);
+                Vec3d p0 = sunP.add(dir.multiply(5)), p1 = sunP.add(dir.multiply(70)).subtract(SUN.multiply(20));
+                Bill.ribbon(rays, c.ms, p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, c.cam.x, c.cam.y, c.cam.z, 2.5f + k % 4, gold[0] * rk, gold[1] * rk * 0.85f,
+                        gold[2] * rk * 0.6f, 1, 0, 1);
+            }
             Bill.sprite(c.vcp.getBuffer(RenderLayer.getEyes(Kit.HALO)), c.ms, sunP.x, sunP.y, sunP.z, 60, 0, 0.5f, 0.28f, 0.1f);
             // sea of clouds: sorted far to near so the soft edges layer properly
             Integer[] order = new Integer[CLOUDS];
