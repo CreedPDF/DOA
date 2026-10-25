@@ -41,7 +41,7 @@ public final class BeyondMove implements Move {
     private static final int STREAKS = 240;
     private static final float[] ST = new float[STREAKS * 4];
     private static final Vec3d FATE_DIR = new Vec3d(0.2, 0.35, -0.9).normalize();
-    private static final Vec3d LINE = new Vec3d(0.97, 0.12, 0.2).normalize();
+    private static final Vec3d LINE_DIR = new Vec3d(0.97, 0.12, 0.2).normalize();
     private static final float[][] SCATTER = new float[7][3];
 
     static {
@@ -94,7 +94,7 @@ public final class BeyondMove implements Move {
         float k = Rite.smooth((a - BYD_ALIGN - 10) / 40.0);
         Vec3d base = FATE_DIR.multiply(62);
         Vec3d sc = base.add(SCATTER[i][0], SCATTER[i][1] * 0.6, SCATTER[i][2] * 0.3);
-        Vec3d al = base.add(LINE.multiply((i - 3) * 7.0));
+        Vec3d al = base.add(LINE_DIR.multiply((i - 3) * 7.0));
         return Kit.lerp(sc, al, k);
     }
 
