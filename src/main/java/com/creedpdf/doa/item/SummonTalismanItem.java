@@ -1,6 +1,9 @@
 package com.creedpdf.doa.item;
 
+import com.creedpdf.doa.Abilities;
+import com.creedpdf.doa.Pillars;
 import com.creedpdf.doa.Rite;
+import net.minecraft.server.network.ServerPlayerEntity;
 import com.creedpdf.doa.entity.ArmoryCoreEntity;
 import com.creedpdf.doa.registry.DoaEntities;
 import net.minecraft.entity.player.PlayerEntity;
@@ -33,10 +36,29 @@ public class SummonTalismanItem extends Item {
                 user.sendMessage(Text.translatable("message.doa.releasing").formatted(Formatting.GRAY), true);
             } else if (core.getRiteTicks() < Rite.SEALED) {
                 user.sendMessage(Text.translatable("message.doa.in_progress").formatted(Formatting.DARK_RED), true);
+            } else if (user.isSneaking()) {
+                if (core.getAbility() >= 0) {
+                    user.sendMessage(Text.translatable("message.doa.busy").formatted(Formatting.GRAY), true);
+                } else {
+                    core.startRelease();
+                    user.sendMessage(Text.translatable("message.doa.release").formatted(Formatting.GRAY), true);
+                    user.getItemCooldownManager().set(this, 60);
+                }
             } else {
-                core.startRelease();
-                user.sendMessage(Text.translatable("message.doa.release").formatted(Formatting.GRAY), true);
-                user.getItemCooldownManager().set(this, 60);
+                int relic = core.lookedAtRelic(user);
+                if (relic < 0) {
+                    user.sendMessage(Text.translatable("message.doa.look").formatted(Formatting.GRAY), true);
+                } else if (user instanceof ServerPlayerEntity sp) {
+                    String err = core.awaken(sp, relic);
+                    if (err == null) {
+                        user.sendMessage(Text.literal(Pillars.KANJI[relic] + "  " + Abilities.TITLE[relic]).withColor(Pillars.rgb(relic)), true);
+                        user.getItemCooldownManager().set(this, 20);
+                    } else if (err.equals("message.doa.cooldown")) {
+                        user.sendMessage(Text.translatable(err, core.secondsUntilReady(relic)).formatted(Formatting.GRAY), true);
+                    } else {
+                        user.sendMessage(Text.translatable(err).formatted(Formatting.GRAY), true);
+                    }
+                }
             }
             return TypedActionResult.success(stack);
         }

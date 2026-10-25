@@ -70,6 +70,7 @@ public final class Fx {
         core.fxTick = t;
         if (rel >= 0) releaseFx(core, rel, rnd);
         else continuous(core, t, rnd);
+        AbilityFx.tick(core);
     }
 
     private static void events(ArmoryCoreEntity core, int t, Random rnd) {

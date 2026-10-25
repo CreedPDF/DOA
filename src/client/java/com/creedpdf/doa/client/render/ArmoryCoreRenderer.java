@@ -1,5 +1,6 @@
 package com.creedpdf.doa.client.render;
 
+import com.creedpdf.doa.Abilities;
 import com.creedpdf.doa.DoaMod;
 import com.creedpdf.doa.Pillars;
 import com.creedpdf.doa.Rite;
@@ -34,20 +35,20 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
     private static final int FULL = LightmapTextureManager.MAX_LIGHT_COORDINATE;
     private static final int OV = OverlayTexture.DEFAULT_UV;
 
-    private static final Identifier[] PILLAR = new Identifier[Pillars.COUNT];
-    private static final Identifier[] PILLAR_GLOW = new Identifier[Pillars.COUNT];
-    private static final Identifier[] SEAL = new Identifier[Pillars.COUNT];
-    private static final Identifier[] LABEL = new Identifier[Pillars.COUNT];
-    private static final Identifier RELIC = DoaMod.id("textures/entity/relic.png");
-    private static final Identifier RELIC_GLOW = DoaMod.id("textures/entity/relic_glow.png");
-    private static final Identifier COLUMN = DoaMod.id("textures/effect/add_light_column.png");
-    private static final Identifier TRAIL = DoaMod.id("textures/effect/add_brush_trail.png");
-    private static final Identifier RING_ADD = DoaMod.id("textures/effect/add_ink_ring.png");
-    private static final Identifier RING_INK = DoaMod.id("textures/effect/ink_ring.png");
-    private static final Identifier SKIN = DoaMod.id("textures/effect/orb_skin.png");
-    private static final Identifier EDGE = DoaMod.id("textures/effect/add_orb_edge.png");
-    private static final Identifier EDGE_INK = DoaMod.id("textures/effect/orb_edge.png");
-    private static final Identifier HALO = DoaMod.id("textures/effect/add_halo.png");
+    static final Identifier[] PILLAR = new Identifier[Pillars.COUNT];
+    static final Identifier[] PILLAR_GLOW = new Identifier[Pillars.COUNT];
+    static final Identifier[] SEAL = new Identifier[Pillars.COUNT];
+    static final Identifier[] LABEL = new Identifier[Pillars.COUNT];
+    static final Identifier RELIC = DoaMod.id("textures/entity/relic.png");
+    static final Identifier RELIC_GLOW = DoaMod.id("textures/entity/relic_glow.png");
+    static final Identifier COLUMN = DoaMod.id("textures/effect/add_light_column.png");
+    static final Identifier TRAIL = DoaMod.id("textures/effect/add_brush_trail.png");
+    static final Identifier RING_ADD = DoaMod.id("textures/effect/add_ink_ring.png");
+    static final Identifier RING_INK = DoaMod.id("textures/effect/ink_ring.png");
+    static final Identifier SKIN = DoaMod.id("textures/effect/orb_skin.png");
+    static final Identifier EDGE = DoaMod.id("textures/effect/add_orb_edge.png");
+    static final Identifier EDGE_INK = DoaMod.id("textures/effect/orb_edge.png");
+    static final Identifier HALO = DoaMod.id("textures/effect/add_halo.png");
 
     static {
         for (int i = 0; i < Pillars.COUNT; i++) {
@@ -63,6 +64,7 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
     private static final double BAND = 3.0;
 
     private final TextRenderer text;
+    private double oculus;
 
     public ArmoryCoreRenderer(EntityRendererFactory.Context ctx) {
         super(ctx);
@@ -99,11 +101,13 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         if (rel < 0 || Rite.dome(t, rel) > 0) {
             renderCore(t, rel, time, ms, vcp);
             renderCorruption(t, rel, time, ms, vcp);
+            oculus = AbilityRenderer.oculus(e, td);
             renderDome(t, rel, time, ms, vcp);
         }
         if (t >= Rite.SEALED) {
             for (int i = 0; i < Pillars.COUNT; i++) renderRelic(e, i, e.pillarBase(i).subtract(origin), t, rel, time, ms, vcp);
         }
+        AbilityRenderer.render(e, td, ms, vcp, origin, cam, this.dispatcher);
         super.render(e, yaw, td, ms, vcp, light);
     }
 
@@ -253,13 +257,32 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         };
         model.render(ms, vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(RELIC)), FULL, OV, 1, 1, 1, 1, poser);
         float pulse = 0.8f + 0.2f * MathHelper.sin((float) time * 0.13f + i);
+        boolean ready = e.isRelicReady(i);
+        boolean active = e.getAbility() == i;
+        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
+        boolean hovered = !active && mc.player != null && e.getOwnerNetId() == mc.player.getId() && e.getAbility() < 0
+                && rel < 0 && e.lookedAtRelic(mc.player) == i;
+        if (!ready && !active) pulse *= 0.25f;
+        if (active) pulse = 1.6f + 0.4f * MathHelper.sin((float) time * 0.5f);
+        if (hovered) pulse *= 1.5f;
         model.render(ms, vcp.getBuffer(RenderLayer.getEyes(RELIC_GLOW)), FULL, OV, c[0] * pulse, c[1] * pulse, c[2] * pulse, 1, poser);
         ms.pop();
         ms.push();
         ms.translate(p.x, p.y, p.z);
         ms.multiply(this.dispatcher.getRotation());
         float hk = k * 0.35f * pulse;
-        billboard(vcp.getBuffer(RenderLayer.getEyes(HALO)), ms, 1.3f * k, c[0] * hk, c[1] * hk, c[2] * hk);
+        billboard(vcp.getBuffer(RenderLayer.getEyes(HALO)), ms, (hovered || active ? 2.2f : 1.3f) * k, c[0] * hk, c[1] * hk, c[2] * hk);
+        if (hovered) {
+            ms.translate(0, 1.15, 0);
+            ms.scale(0.022f, -0.022f, 0.022f);
+            Matrix4f mm = ms.peek().getPositionMatrix();
+            String title = Pillars.KANJI[i] + "  " + Abilities.TITLE[i];
+            text.draw(Text.literal(title), -text.getWidth(title) / 2f, 0, 0xFF000000 | Pillars.rgb(i), false, mm, vcp,
+                    TextRenderer.TextLayerType.NORMAL, 0x60000000, FULL);
+            String sub = ready ? Abilities.LINE[i] : "resting...";
+            text.draw(Text.literal(sub), -text.getWidth(sub) / 2f, 11, 0xFFD8D0C0, false, mm, vcp,
+                    TextRenderer.TextLayerType.NORMAL, 0x40000000, FULL);
+        }
         ms.pop();
     }
 
@@ -359,6 +382,11 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         for (int j = 0; j < cols; j++) {
             double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
             double e0 = Rite.domeEdge(a0, p, et), e1 = Rite.domeEdge(a1, p, et);
+            if (oculus > 0.01) {
+                double jag = 2.5 * Math.sin(a0 * 9 + time * 0.1);
+                e0 = Math.min(e0, 90 - oculus + jag);
+                e1 = Math.min(e1, 90 - oculus + 2.5 * Math.sin(a1 * 9 + time * 0.1));
+            }
             double eTop = Math.max(e0, e1);
             float u0 = (float) j / cols * 10, u1 = (float) (j + 1) / cols * 10;
             for (double lat = 0; lat < eTop; lat += BAND) {
@@ -425,12 +453,12 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         vtx(vc, m, en, p00[0], p00[1], p00[2], u0, 1, r, g, b, al, FULL, 0, 1, 0);
     }
 
-    private static float[] sph(double R, double a, double latDeg) {
+    static float[] sph(double R, double a, double latDeg) {
         double el = Math.toRadians(latDeg);
         return new float[]{(float) (Math.sin(a) * Math.cos(el) * R), (float) (Math.sin(el) * R), (float) (-Math.cos(a) * Math.cos(el) * R)};
     }
 
-    private static void sphere(VertexConsumer vc, MatrixStack ms, double r, int lats, int lons, double time) {
+    static void sphere(VertexConsumer vc, MatrixStack ms, double r, int lats, int lons, double time) {
         MatrixStack.Entry en = ms.peek();
         Matrix4f m = en.getPositionMatrix();
         for (int i = 0; i < lats; i++) {
@@ -449,17 +477,17 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
 
     // ------------------------------------------------------------------------------------------------ primitives
 
-    private static void vtx(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, float x, float y, float z, float u, float v,
+    static void vtx(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, float x, float y, float z, float u, float v,
                             float r, float g, float b, float a, int light, float nx, float ny, float nz) {
         vc.vertex(m, x, y, z).color(Math.min(1, r), Math.min(1, g), Math.min(1, b), Math.min(1, a)).texture(u, v).overlay(OV).light(light).normal(en, nx, ny, nz);
     }
 
     /** Flat quad on the ground, both sides, additive (colour = brightness). */
-    private static void flat(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb) {
+    static void flat(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb) {
         flatColor(vc, ms, r, cr, cg, cb, 1);
     }
 
-    private static void flatColor(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb, float a) {
+    static void flatColor(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb, float a) {
         MatrixStack.Entry en = ms.peek();
         Matrix4f m = en.getPositionMatrix();
         float s = (float) r;
@@ -474,7 +502,7 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
     }
 
     /** Quad in the local XY plane (after a camera-facing rotation), oriented like vanilla particles. */
-    private static void billboard(VertexConsumer vc, MatrixStack ms, float s, float r, float g, float b) {
+    static void billboard(VertexConsumer vc, MatrixStack ms, float s, float r, float g, float b) {
         MatrixStack.Entry en = ms.peek();
         Matrix4f m = en.getPositionMatrix();
         vtx(vc, m, en, -s, -s, 0, 1, 1, r, g, b, 1, FULL, 0, 0, 1);
@@ -488,7 +516,7 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
     }
 
     /** A vertical strip at (base.x, base.z) facing the camera around the Y axis, from y0 to y1 above base.y. */
-    private static void column(VertexConsumer vc, MatrixStack ms, Vec3d base, Vec3d cam, double halfWidth, double y0, double y1,
+    static void column(VertexConsumer vc, MatrixStack ms, Vec3d base, Vec3d cam, double halfWidth, double y0, double y1,
                                float r, float g, float b, float vBottom, float vTop) {
         double dx = cam.x - base.x, dz = cam.z - base.z;
         double len = Math.sqrt(dx * dx + dz * dz);
@@ -510,7 +538,28 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         vtx(vc, m, en, bx - rx, ya, bz - rz, 0, vBottom, r, g, b, 1, FULL, 0, 1, 0);
     }
 
-    private static String spaced(String s) {
+    /** A camera-facing ribbon from a to b (both sides), v running 0 at a to 1 at b. */
+    static void strip(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, Vec3d a, Vec3d b, Vec3d cam, double halfWidth,
+                      float r, float g, float bl) {
+        Vec3d d = b.subtract(a);
+        if (d.lengthSquared() < 1e-8) return;
+        Vec3d mid = a.add(b).multiply(0.5);
+        Vec3d side = d.crossProduct(cam.subtract(mid));
+        if (side.lengthSquared() < 1e-8) side = d.crossProduct(new Vec3d(0, 1, 0.01));
+        side = side.normalize().multiply(halfWidth);
+        float ax = (float) a.x, ay = (float) a.y, az = (float) a.z, bx = (float) b.x, by = (float) b.y, bz = (float) b.z;
+        float sx = (float) side.x, sy = (float) side.y, sz = (float) side.z;
+        vtx(vc, m, en, ax - sx, ay - sy, az - sz, 0, 0, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, ax + sx, ay + sy, az + sz, 1, 0, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, bx + sx, by + sy, bz + sz, 1, 1, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, bx - sx, by - sy, bz - sz, 0, 1, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, bx - sx, by - sy, bz - sz, 0, 1, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, bx + sx, by + sy, bz + sz, 1, 1, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, ax + sx, ay + sy, az + sz, 1, 0, r, g, bl, 1, FULL, 0, 1, 0);
+        vtx(vc, m, en, ax - sx, ay - sy, az - sz, 0, 0, r, g, bl, 1, FULL, 0, 1, 0);
+    }
+
+    static String spaced(String s) {
         StringBuilder b = new StringBuilder();
         for (int k = 0; k < s.length(); k++) {
             if (k > 0) b.append(' ');

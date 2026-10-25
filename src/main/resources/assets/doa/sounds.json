@@ -97,5 +97,104 @@
         "attenuation_distance": 32
       }
     ]
+  },
+  "verdict": {
+    "subtitle": "subtitles.doa.verdict",
+    "sounds": [
+      {
+        "name": "doa:verdict",
+        "attenuation_distance": 160
+      }
+    ]
+  },
+  "absolution": {
+    "subtitle": "subtitles.doa.absolution",
+    "sounds": [
+      {
+        "name": "doa:absolution",
+        "attenuation_distance": 64
+      }
+    ]
+  },
+  "war_drums": {
+    "subtitle": "subtitles.doa.war_drums",
+    "sounds": [
+      {
+        "name": "doa:war_drums",
+        "attenuation_distance": 160
+      }
+    ]
+  },
+  "spear": {
+    "subtitle": "subtitles.doa.spear",
+    "sounds": [
+      {
+        "name": "doa:spear",
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "soul": {
+    "subtitle": "subtitles.doa.soul",
+    "sounds": [
+      {
+        "name": "doa:soul",
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "fate_ascend": {
+    "subtitle": "subtitles.doa.fate_ascend",
+    "sounds": [
+      {
+        "name": "doa:fate_ascend",
+        "attenuation_distance": 48
+      }
+    ]
+  },
+  "fate_space": {
+    "subtitle": "subtitles.doa.fate_space",
+    "sounds": [
+      {
+        "name": "doa:fate_space",
+        "attenuation_distance": 32
+      }
+    ]
+  },
+  "fate_strike": {
+    "subtitle": "subtitles.doa.fate_strike",
+    "sounds": [
+      {
+        "name": "doa:fate_strike",
+        "attenuation_distance": 192
+      }
+    ]
+  },
+  "silence": {
+    "subtitle": "subtitles.doa.silence",
+    "sounds": [
+      {
+        "name": "doa:silence",
+        "attenuation_distance": 192
+      }
+    ]
+  },
+  "void_open": {
+    "subtitle": "subtitles.doa.void_open",
+    "sounds": [
+      {
+        "name": "doa:void_open",
+        "attenuation_distance": 128
+      }
+    ]
+  },
+  "void_collapse": {
+    "subtitle": "subtitles.doa.void_collapse",
+    "sounds": [
+      {
+        "name": "doa:void_collapse",
+        "attenuation_distance": 160
+      }
+    ]
   }
 }

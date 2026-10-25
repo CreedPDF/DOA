@@ -53,6 +53,14 @@ public class ArmoryCoreEntity extends Entity {
     private static final TrackedData<Integer> RELEASE = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<Integer> OWNER = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<NbtCompound> GROUND = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.NBT_COMPOUND);
+    private static final TrackedData<Integer> ABILITY = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    private static final TrackedData<Integer> ABILITY_T = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    private static final TrackedData<NbtCompound> ABILITY_DATA = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.NBT_COMPOUND);
+    private static final TrackedData<Integer> READY = DataTracker.registerData(ArmoryCoreEntity.class, TrackedDataHandlerRegistry.INTEGER);
+
+    private final AbilityEngine abilities = new AbilityEngine(this);
+    private int clientAbilityT = -1;
+    private int clientAbility = -1;
 
     /** Client hook (VFX), installed by the client initializer. */
     public static Consumer<ArmoryCoreEntity> clientTick = e -> {
@@ -79,6 +87,8 @@ public class ArmoryCoreEntity extends Entity {
     private int clientRelease = -1;
     /** Last tick the client-side VFX processed (owned by the client code). */
     public int fxTick = -1;
+    public int fxAbility = -1;
+    public int fxAbilityTick = -1;
 
     public ArmoryCoreEntity(EntityType<?> type, World world) {
         super(type, world);
@@ -92,6 +102,10 @@ public class ArmoryCoreEntity extends Entity {
         builder.add(RELEASE, -1);
         builder.add(OWNER, -1);
         builder.add(GROUND, new NbtCompound());
+        builder.add(ABILITY, -1);
+        builder.add(ABILITY_T, 0);
+        builder.add(ABILITY_DATA, new NbtCompound());
+        builder.add(READY, 0x7F);
     }
 
     public void begin(PlayerEntity owner) {
@@ -136,6 +150,72 @@ public class ArmoryCoreEntity extends Entity {
         return new Vec3d(getX() + Rite.dx(i), pillarGround(i), getZ() + Rite.dz(i));
     }
 
+    /** Where relic i hovers, released from its pillar toward the heart of the circle. */
+    public Vec3d relicPos(int i) {
+        Vec3d b = pillarBase(i);
+        Vec3d in = new Vec3d(getX() - b.x, 0, getZ() - b.z).normalize();
+        return b.add(in.multiply(2.2)).add(0, 2.3, 0);
+    }
+
+    // ------------------------------------------------------------------------------------------------ abilities
+
+    public int getAbility() {
+        if (getWorld().isClient) return clientAbility;
+        return this.dataTracker.get(ABILITY);
+    }
+
+    public int getAbilityTicks() {
+        if (getWorld().isClient) return clientAbilityT;
+        return this.dataTracker.get(ABILITY_T);
+    }
+
+    public NbtCompound getAbilityData() {
+        return this.dataTracker.get(ABILITY_DATA);
+    }
+
+    public boolean isRelicReady(int i) {
+        return (this.dataTracker.get(READY) & (1 << i)) != 0;
+    }
+
+    void setAbilityState(int ability, int a, NbtCompound data) {
+        this.dataTracker.set(ABILITY, ability);
+        this.dataTracker.set(ABILITY_T, a);
+        if (data != null) this.dataTracker.set(ABILITY_DATA, data);
+    }
+
+    void setReadyMask(int m) {
+        if (this.dataTracker.get(READY) != m) this.dataTracker.set(READY, m);
+    }
+
+    /** The relic the player is looking at (within a narrow cone), or -1. */
+    public int lookedAtRelic(PlayerEntity p) {
+        Vec3d eye = p.getEyePos(), look = p.getRotationVec(1f);
+        int best = -1;
+        double bestCos = Math.cos(Math.toRadians(13));
+        for (int i = 0; i < Pillars.COUNT; i++) {
+            Vec3d d = relicPos(i).subtract(eye);
+            double len = d.length();
+            if (len < 1e-3 || len > 40) continue;
+            double cos = d.dotProduct(look) / len;
+            if (cos > bestCos) {
+                bestCos = cos;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    /** Awaken a relic for its owner. Returns null on success or a message key. */
+    public String awaken(ServerPlayerEntity player, int relic) {
+        if (!(getWorld() instanceof ServerWorld sw)) return "message.doa.busy";
+        if (isReleasing() || getRiteTicks() < Rite.relicAppear(relic) + 20) return "message.doa.in_progress";
+        return abilities.start(relic, sw, player, getRiteTicks());
+    }
+
+    public int secondsUntilReady(int relic) {
+        return Math.max(0, (abilities.readyAt[relic] - getRiteTicks()) / 20);
+    }
+
     public void startRelease() {
         if (this.dataTracker.get(RELEASE) < 0) {
             this.dataTracker.set(RELEASE, 0);
@@ -155,6 +235,14 @@ public class ArmoryCoreEntity extends Entity {
             int sr = this.dataTracker.get(RELEASE);
             if (sr < 0) clientRelease = -1;
             else clientRelease = clientRelease < 0 || Math.abs(clientRelease + 1 - sr) > 3 ? sr : clientRelease + 1;
+            int sa = this.dataTracker.get(ABILITY);
+            int sat = this.dataTracker.get(ABILITY_T);
+            if (sa != clientAbility) {
+                clientAbility = sa;
+                clientAbilityT = sat;
+            } else if (sa >= 0) {
+                clientAbilityT = Math.abs(clientAbilityT + 1 - sat) > 3 ? sat : clientAbilityT + 1;
+            }
             clientTick.accept(this);
             return;
         }
@@ -164,6 +252,7 @@ public class ArmoryCoreEntity extends Entity {
 
         int rel = this.dataTracker.get(RELEASE);
         if (rel >= 0) {
+            abilities.abort();
             releaseTick(sw, rel);
             if (!isRemoved()) this.dataTracker.set(RELEASE, rel + 1);
             return;
@@ -179,6 +268,7 @@ public class ArmoryCoreEntity extends Entity {
             else if (t < Rite.CUT_END) holdOwner(owner);
         }
         riteTick(sw, t);
+        if (t > Rite.SEALED) abilities.tick(sw, owner, t);
     }
 
     private void riteTick(ServerWorld sw, int t) {
@@ -439,6 +529,7 @@ public class ArmoryCoreEntity extends Entity {
     }
 
     private void cleanup(ServerWorld sw) {
+        abilities.unfreezeAll(sw);
         restoreInk(sw, -1);
         restore(sw, placed);
         restore(sw, pillarPlaced);
@@ -500,7 +591,7 @@ public class ArmoryCoreEntity extends Entity {
 
     @Override
     public boolean shouldRender(double distance) {
-        return distance < 384 * 384;
+        return distance < 1024 * 1024;
     }
 
     @Override
@@ -526,6 +617,7 @@ public class ArmoryCoreEntity extends Entity {
         readStates(nbt.getList("Shell", NbtElement.COMPOUND_TYPE), placed);
         readStates(nbt.getList("PillarBlocks", NbtElement.COMPOUND_TYPE), pillarPlaced);
         readStates(nbt.getList("Ink", NbtElement.COMPOUND_TYPE), inked);
+        abilities.read(nbt);
         if (this.dataTracker.get(TICKS) >= Rite.SEAL) planShell();
     }
 
@@ -538,6 +630,7 @@ public class ArmoryCoreEntity extends Entity {
         nbt.put("Shell", writeStates(placed));
         nbt.put("PillarBlocks", writeStates(pillarPlaced));
         nbt.put("Ink", writeStates(inked));
+        abilities.write(nbt);
     }
 
     private static NbtList writeStates(Map<Long, BlockState> map) {

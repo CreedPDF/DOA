@@ -1,7 +1,7 @@
 {
   "item.doa.summon_talisman": "Talisman of Summoning",
   "item.doa.summon_talisman.tip1": "召  Calls down the Orbital Armory",
-  "item.doa.summon_talisman.tip2": "Use to summon the seven pillars. Use again within the sealed sphere to release them.",
+  "item.doa.summon_talisman.tip2": "Use to summon the seven pillars. Inside the sealed sphere: look at a relic and use to awaken it, sneak + use to break the seal.",
   "item.doa.summon_talisman.tip3": "Death, Redemption, Wrath, Soul, Fate, Silence, Void.",
   "block.doa.orb_shell": "Wall of the Dark Sphere",
   "entity.doa.armory_core": "Orbital Armory",
@@ -19,5 +19,20 @@
   "subtitles.doa.orb_hum": "The dark sphere hums",
   "subtitles.doa.dissolve": "The dark sphere fades",
   "subtitles.doa.ascend": "The pillars return to the heavens",
-  "subtitles.doa.relic": "A relic awakens"
+  "subtitles.doa.relic": "A relic awakens",
+  "block.doa.ink_stone": "Ink Stone",
+  "message.doa.look": "Look at a relic to awaken it  -  sneak + use to break the seal.",
+  "message.doa.busy": "A relic is already awake.",
+  "message.doa.cooldown": "That relic is resting (%s s).",
+  "subtitles.doa.verdict": "Death passes judgement",
+  "subtitles.doa.absolution": "Heaven's light descends",
+  "subtitles.doa.war_drums": "War drums of heaven",
+  "subtitles.doa.spear": "A spear of fire strikes",
+  "subtitles.doa.soul": "Souls are drawn away",
+  "subtitles.doa.fate_ascend": "You rise to the heavens",
+  "subtitles.doa.fate_space": "The stars sing",
+  "subtitles.doa.fate_strike": "The stars strike",
+  "subtitles.doa.silence": "A great bell tolls",
+  "subtitles.doa.void_open": "The void opens",
+  "subtitles.doa.void_collapse": "The void collapses"
 }

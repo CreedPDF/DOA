@@ -15,6 +15,8 @@ import java.util.Optional;
 public class DoaModels implements SimpleSynchronousResourceReloadListener {
     public static DoaModel PILLAR;
     public static DoaModel RELIC;
+    public static DoaMesh PLANET;
+    public static DoaMesh RING;
 
     @Override
     public Identifier getFabricId() {
@@ -25,6 +27,23 @@ public class DoaModels implements SimpleSynchronousResourceReloadListener {
     public void reload(ResourceManager manager) {
         PILLAR = load(manager, "models/entity/pillar.json");
         RELIC = load(manager, "models/entity/relic.json");
+        PLANET = loadMesh(manager, "models/space/planet.json");
+        RING = loadMesh(manager, "models/space/ring.json");
+    }
+
+    private static DoaMesh loadMesh(ResourceManager manager, String path) {
+        Identifier id = DoaMod.id(path);
+        Optional<Resource> res = manager.getResource(id);
+        if (res.isEmpty()) {
+            DoaMod.LOG.error("Missing DOA mesh {}", id);
+            return null;
+        }
+        try (Reader r = res.get().getReader()) {
+            return DoaMesh.parse(JsonParser.parseReader(r).getAsJsonObject());
+        } catch (Exception e) {
+            DoaMod.LOG.error("Failed to load DOA mesh {}", id, e);
+            return null;
+        }
     }
 
     private static DoaModel load(ResourceManager manager, String path) {

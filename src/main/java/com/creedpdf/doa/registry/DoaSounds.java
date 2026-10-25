@@ -18,6 +18,17 @@ public final class DoaSounds {
     public static final SoundEvent DISSOLVE = reg("dissolve");
     public static final SoundEvent ASCEND = reg("ascend");
     public static final SoundEvent RELIC = reg("relic");
+    public static final SoundEvent VERDICT = reg("verdict");
+    public static final SoundEvent ABSOLUTION = reg("absolution");
+    public static final SoundEvent WAR_DRUMS = reg("war_drums");
+    public static final SoundEvent SPEAR = reg("spear");
+    public static final SoundEvent SOUL = reg("soul");
+    public static final SoundEvent FATE_ASCEND = reg("fate_ascend");
+    public static final SoundEvent FATE_SPACE = reg("fate_space");
+    public static final SoundEvent FATE_STRIKE = reg("fate_strike");
+    public static final SoundEvent SILENCE = reg("silence");
+    public static final SoundEvent VOID_OPEN = reg("void_open");
+    public static final SoundEvent VOID_COLLAPSE = reg("void_collapse");
 
     private DoaSounds() {
     }

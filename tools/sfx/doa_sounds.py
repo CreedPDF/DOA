@@ -380,16 +380,168 @@ def s_relic():
     return hall(out, 0.8, 0.3)
 
 
+# ------------------------------------------------------------------------------------------ ability sounds
+
+def slash(d=0.5):
+    """A blade of ink cutting the air: a fast band sweep through noise."""
+    t = t_of(d)
+    x = noise(d)
+    out = np.zeros_like(x)
+    L = len(x) // 20
+    for i in range(20):
+        fc = 6000 * (1 - i / 20) + 600
+        seg = bp(x[i * L:(i + 2) * L], fc * 0.6, min(fc * 1.6, 20000))
+        out[i * L:i * L + len(seg[:L])] += seg[:L]
+    return out * np.exp(-t / 0.12) * np.clip(t / 0.01, 0, 1)
+
+
+def singing_bowl(f0, d):
+    t = t_of(d)
+    x = sum(a * np.sin(2 * np.pi * f0 * r * t + 0.3 * np.sin(2 * np.pi * 0.8 * t)) * np.exp(-t / dc)
+            for r, a, dc in ((1, 1, 6), (2.71, 0.5, 4), (5.13, 0.25, 2.5), (8.0, 0.1, 1.5)))
+    return x * np.clip(t / 0.02, 0, 1) * 0.3
+
+
+def s_verdict():
+    out = canvas(6.0)
+    put(out, bonsho(65, 5.5, 1.2), 0, 1.0)
+    put(out, chant(4.5, 58) * swell(4.5, 0.7), 0.3, 0.7)
+    for k in range(5):
+        put(out, slash(0.5), 2.45 + k * 0.05, 0.6)
+    put(out, taiko(44, 3.0, 1.5), 2.5, 1.4)
+    put(out, earth(2.5), 2.5, 0.6)
+    return hall(out, 1.4, 0.45)
+
+
+def s_absolution():
+    out = canvas(6.0)
+    for k, st in enumerate((24, 29, 31, 36, 37, 41, 43, 48)):
+        put(out, singing_bowl(note(st), 4.0), k * 0.16, 0.5)
+    for k, st in enumerate((0, 7, 12)):
+        put(out, chant(4.5, note(st) / 4) * swell(4.5, 0.6), 0.2, 0.35)
+    put(out, furin(4.0, 10, 2600), 1.4, 0.8)
+    put(out, bonsho(196, 4.0, 0.3), 1.45, 0.6)
+    return hall(out, 1.5, 0.55)
+
+
+def s_war_drums():
+    d = 7.5
+    out = canvas(d)
+    beat = 0.32
+    tt, k = 0.0, 0
+    while tt < d - 1.5:
+        accent = 1.0 if k % 4 == 0 else 0.55
+        put(out, taiko(50 if k % 4 == 0 else 66, 1.6, accent), tt, 0.4 + 0.5 * accent)
+        if k % 2 == 1:
+            put(out, hyoshigi(0.3), tt + beat / 2, 0.25)
+        tt += beat * (1 - 0.25 * tt / d)
+        k += 1
+    roar = lp(noise(d), 500, 2) * swell(d, 0.7) * 1.8
+    put(out, roar, 0, 0.6)
+    put(out, hichiriki(lambda t: note(12) * (1 + 0.02 * np.sin(t * 3)), 4.0) * np.clip(t_of(4.0) / 0.3, 0, 1), 0.8, 0.45)
+    return hall(out, 1.3, 0.4)
+
+
+def s_spear():
+    out = canvas(2.2)
+    put(out, wind(0.6, 2500, 600) * swell(0.6, 2), 0, 0.5)
+    put(out, taiko(58, 1.6, 1.1), 0.6, 1.0)
+    put(out, earth(1.4), 0.6, 0.6)
+    put(out, lp(noise(1.2), 2500) * env_ar(1.2, 0.01, 0.25), 0.6, 0.5)
+    return hall(out, 0.9, 0.3)
+
+
+def s_soul():
+    d = 6.5
+    out = canvas(d)
+    put(out, shakuhachi(lambda t: note(7) * 2 ** (np.sin(t * 0.9) * 0.15 + (t / d) * 0.4), d - 0.5, 0.7), 0.2, 0.7)
+    put(out, furin(3.0, 6, 1900)[::-1], 0.5, 0.5)
+    put(out, chant(d, 52) * swell(d, 1.0), 0, 0.5)
+    put(out, bonsho(130, 2.5, 0.5), 4.3, 0.7)
+    return hall(out, 1.6, 0.6)
+
+
+def s_fate_ascend():
+    d = 2.2
+    out = canvas(d)
+    put(out, wind(d, 300, 3600) * swell(d, 1.6), 0, 1.0)
+    for k, st in enumerate((0, 5, 7, 12, 17, 19, 24)):
+        put(out, koto(note(st), 1.6), k * 0.2, 0.5)
+    put(out, chant(d, 65) * swell(d, 1.0), 0, 0.4)
+    return hall(out, 1.2, 0.5)
+
+
+def s_fate_space():
+    d = 8.0
+    t = t_of(d)
+    out = canvas(d)
+    drone = sum(np.sin(2 * np.pi * f * t + np.sin(2 * np.pi * 0.05 * t * (k + 1))) * a for k, (f, a) in enumerate(((36.7, 0.5), (55, 0.35), (73.4, 0.25))))
+    out += drone * np.clip(t / 1.5, 0, 1) * np.clip((d - t) / 1.0, 0, 1) * 0.6
+    for k, st in enumerate((12, 19, 24, 17, 29, 31, 36)):
+        put(out, singing_bowl(note(st) / 2, 5.0), 0.6 + k * 0.9, 0.35)
+    put(out, lp(noise(d), 200) * 0.25 * np.clip(t / 2, 0, 1), 0, 1)
+    return hall(out, 2.0, 0.65)
+
+
+def s_fate_strike():
+    out = canvas(7.0)
+    g = tamtam(3.0)[::-1]
+    put(out, g[-int(0.8 * SR):], 0, 1.0)
+    put(out, bonsho(55, 6.0, 1.6), 0.8, 1.4)
+    put(out, taiko(40, 3.5, 1.6), 0.8, 1.5)
+    put(out, earth(4.0), 0.8, 1.2)
+    put(out, tamtam(5.0), 0.8, 0.7)
+    return hall(out, 1.8, 0.5)
+
+
+def s_silence():
+    d = 9.0
+    out = canvas(d)
+    put(out, bonsho(82, 9.0, 1.0), 0, 1.3)
+    put(out, singing_bowl(note(24), 8.0), 0.05, 0.4)
+    return hall(out, 2.2, 0.6)
+
+
+def s_void_open():
+    d = 6.5
+    t = t_of(d)
+    out = canvas(d)
+    put(out, tamtam(4.0)[::-1], 0, 0.8)
+    sub = np.sin(2 * np.pi * (30 + 8 * t / d) * t) * swell(d, 1.2) * 0.8
+    out += sub
+    put(out, chant(d, 41) * swell(d, 0.8), 0, 0.6)
+    put(out, lp(wind(d, 100, 900), 1200) * swell(d, 1.0), 0, 0.7)
+    return hall(out, 1.6, 0.5)
+
+
+def s_void_collapse():
+    out = canvas(6.0)
+    rev = (bonsho(70, 1.4)[::-1])
+    put(out, rev, 0, 0.9)
+    put(out, taiko(38, 3.5, 1.8), 1.4, 1.6)
+    put(out, earth(3.5), 1.4, 1.2)
+    put(out, bonsho(49, 4.5, 1.0), 1.4, 0.9)
+    return hall(out, 1.7, 0.5)
+
+
+
 SOUNDS = {
     "call": (s_call, 96), "descend": (s_descend, 160), "impact": (s_impact, 160), "reveal": (s_reveal, 48),
     "seal": (s_seal, 48), "orb_rise": (s_orb_rise, 96), "orb_close": (s_orb_close, 128), "orb_hum": (s_orb_hum, 32),
     "dissolve": (s_dissolve, 96), "ascend": (s_ascend, 128), "relic": (s_relic, 32),
+    "verdict": (s_verdict, 160), "absolution": (s_absolution, 64), "war_drums": (s_war_drums, 160), "spear": (s_spear, 96),
+    "soul": (s_soul, 96), "fate_ascend": (s_fate_ascend, 48), "fate_space": (s_fate_space, 32), "fate_strike": (s_fate_strike, 192),
+    "silence": (s_silence, 192), "void_open": (s_void_open, 128), "void_collapse": (s_void_collapse, 160),
 }
 SUBTITLES = {
     "call": "A temple bell tolls from the heavens", "descend": "A pillar falls from the sky", "impact": "A pillar strikes the earth",
     "reveal": "A name is spoken", "seal": "A seal is drawn", "orb_rise": "Darkness rises", "orb_close": "The dark sphere seals",
     "orb_hum": "The dark sphere hums", "dissolve": "The dark sphere fades", "ascend": "The pillars return to the heavens",
     "relic": "A relic awakens",
+    "verdict": "Death passes judgement", "absolution": "Heaven's light descends", "war_drums": "War drums of heaven",
+    "spear": "A spear of fire strikes", "soul": "Souls are drawn away", "fate_ascend": "You rise to the heavens",
+    "fate_space": "The stars sing", "fate_strike": "The stars strike", "silence": "A great bell tolls",
+    "void_open": "The void opens", "void_collapse": "The void collapses",
 }
 
 
