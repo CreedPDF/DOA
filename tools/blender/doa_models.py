@@ -489,6 +489,149 @@ def shoot(scene, cam, path, loc, target, res, lens=40):
     bpy.ops.render.render(write_still=True)
 
 
+
+# ------------------------------------------------------------------------------------------- space (Fate)
+
+def export_mesh(obj, path, flip_v=True):
+    """Write a mesh as doa_mesh_1: per-corner vertices [x,y,z,u,v,nx,ny,nz] (Minecraft axes) and quads
+    (triangles repeat their last corner). Blender z-up -> Minecraft y-up: (x, y, z) -> (x, z, -y)."""
+    me = obj.data
+    me.calc_loop_triangles()
+    uv = me.uv_layers.active.data
+    verts, quads = [], []
+    for poly in me.polygons:
+        idx = []
+        for li in poly.loop_indices:
+            loop = me.loops[li]
+            co = me.vertices[loop.vertex_index].co
+            n = me.vertices[loop.vertex_index].normal if poly.use_smooth else poly.normal
+            u, v = uv[li].uv
+            verts.append([round(co.x, 5), round(co.z, 5), round(-co.y, 5), round(u, 5), round(1 - v if flip_v else v, 5),
+                          round(n.x, 4), round(n.z, 4), round(-n.y, 4)])
+            idx.append(len(verts) - 1)
+        if len(idx) == 3:
+            idx.append(idx[2])
+        if len(idx) == 4:
+            quads.append(idx)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"format": "doa_mesh_1", "verts": [c for v in verts for c in v], "quads": [i for q in quads for i in q]},
+                  f, separators=(",", ":"))
+    print(f"[mesh] {os.path.basename(path)}: {len(verts)} corners, {len(quads)} quads")
+
+
+def make_planet(name, segments=128, rings=64):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=rings, radius=1.0, calc_uvs=True, location=(0, 0, 0))
+    o = bpy.context.active_object
+    o.name = name
+    bpy.ops.object.shade_smooth()
+    return o
+
+
+def make_ring(name, inner=1.35, outer=2.45, segments=192):
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.new("UVMap")
+    rows = []
+    for j in range(segments + 1):
+        a = j / segments * math.tau
+        rows.append((bm.verts.new((math.cos(a) * inner, math.sin(a) * inner, 0)), bm.verts.new((math.cos(a) * outer, math.sin(a) * outer, 0))))
+    for j in range(segments):
+        (i0, o0), (i1, o1) = rows[j], rows[j + 1]
+        f = bm.faces.new((i0, o0, o1, i1))
+        for loop, (u, v) in zip(f.loops, ((0, j / segments), (1, j / segments), (1, (j + 1) / segments), (0, (j + 1) / segments))):
+            loop[uvl].uv = (u, v)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
+def image_mat(name, img_path, emission=None, alpha=False, emit_strength=1.0, roughness=0.8):
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(img_path)
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = roughness
+    if alpha:
+        nt.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        if hasattr(mat, "blend_method"):
+            mat.blend_method = "BLEND"
+    if emission:
+        et = nt.nodes.new("ShaderNodeTexImage")
+        et.image = bpy.data.images.load(emission)
+        nt.links.new(et.outputs["Color"], bsdf.inputs["Emission Color"])
+        bsdf.inputs["Emission Strength"].default_value = emit_strength
+    return mat
+
+
+def build_space(assets, out, render):
+    reset()
+    planet = make_planet("planet")
+    export_mesh(planet, os.path.join(assets, "models/space/planet.json"))
+    ring = make_ring("ring")
+    export_mesh(ring, os.path.join(assets, "models/space/ring.json"), flip_v=False)
+    if not render:
+        return
+    tex = os.path.join(assets, "textures/space")
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = 48
+    scene.cycles.use_denoising = False
+    world = bpy.data.worlds.new("space")
+    world.use_nodes = True
+    nt = world.node_tree
+    env = nt.nodes.new("ShaderNodeTexEnvironment")
+    env.image = bpy.data.images.load(os.path.join(tex, "milkyway.png"))
+    nt.links.new(env.outputs["Color"], nt.nodes["Background"].inputs["Color"])
+    nt.nodes["Background"].inputs[1].default_value = 1.4
+    scene.world = world
+    # the world below
+    planet.scale = (6, 6, 6)
+    planet.location = (0, 0, -7.2)
+    planet.data.materials.append(image_mat("earth", os.path.join(tex, "earth.png"), os.path.join(tex, "earth_night.png"), emit_strength=0.6))
+    clouds = make_planet("clouds", 96, 48)
+    clouds.scale = (6.06, 6.06, 6.06)
+    clouds.location = planet.location
+    clouds.data.materials.append(image_mat("clouds", os.path.join(tex, "earth_clouds.png"), alpha=True, roughness=1.0))
+    moon = make_planet("moon", 64, 32)
+    moon.scale = (0.7, 0.7, 0.7)
+    moon.location = (-4.5, 9, 1.6)
+    moon.data.materials.append(image_mat("moon", os.path.join(tex, "moon.png"), roughness=1.0))
+    giant = make_planet("giant", 96, 48)
+    giant.scale = (2.0, 2.0, 2.0)
+    giant.location = (7, 16, 3.5)
+    giant.rotation_euler = (math.radians(18), math.radians(-12), 0)
+    giant.data.materials.append(image_mat("giant", os.path.join(tex, "giant.png"), roughness=0.9))
+    ring.scale = (2.0, 2.0, 2.0)
+    ring.location = giant.location
+    ring.rotation_euler = giant.rotation_euler
+    ring.data.materials.append(image_mat("ring", os.path.join(tex, "ring.png"), alpha=True, roughness=1.0))
+    sun = bpy.data.lights.new("sun", "SUN")
+    sun.energy = 4.0
+    sun.color = (1.0, 0.96, 0.9)
+    so = bpy.data.objects.new("sun", sun)
+    so.rotation_euler = (math.radians(70), math.radians(10), math.radians(-120))
+    scene.collection.objects.link(so)
+    cam = bpy.data.cameras.new("cam")
+    co = bpy.data.objects.new("cam", cam)
+    scene.collection.objects.link(co)
+    scene.camera = co
+    co.location = Vector((0, -6.5, 0.6))
+    co.rotation_euler = (Vector((1.5, 10, 0.4)) - co.location).to_track_quat("-Z", "Y").to_euler()
+    cam.lens = 22
+    scene.render.resolution_x = 1280
+    scene.render.resolution_y = 720
+    scene.render.filepath = os.path.join(out, "space.png")
+    bpy.ops.render.render(write_still=True)
+
+
 # ------------------------------------------------------------------------------------------- main
 
 def main():
@@ -525,6 +668,7 @@ def main():
     print(f"[relic] atlas {rsize}px")
 
     if a.no_render:
+        build_space(assets, out, False)
         return
     scene, cam = setup_render()
     # the ring of seven, as called down
@@ -555,6 +699,8 @@ def main():
     # relic
     build_mesh("relic", rparts, rsize, rai, rgi, Vector((40, 0, 1)))
     shoot(scene, cam, os.path.join(out, "relic.png"), (41.6, -2.2, 2.4), (40, 0, 1.6), 700, lens=50)
+    # the heavens the Fate pillar opens
+    build_space(assets, out, True)
 
 
 if __name__ == "__main__":

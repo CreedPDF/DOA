@@ -68,6 +68,11 @@ public class ArmoryCoreEntity extends Entity {
     private final List<Double> shellElev = new ArrayList<>();
     private final Map<Long, BlockState> placed = new LinkedHashMap<>();
     private final Map<Long, BlockState> pillarPlaced = new LinkedHashMap<>();
+    /** Ground inside the sphere turned to ink stone (or cleared), in spreading order, with what it was. */
+    private final List<BlockPos> inkPlan = new ArrayList<>();
+    private final List<Double> inkDist = new ArrayList<>();
+    private final Map<Long, BlockState> inked = new LinkedHashMap<>();
+    private static final int QUIET = Block.NOTIFY_LISTENERS | Block.FORCE_STATE | Block.SKIP_DROPS;
 
     // client-side smoothed counters
     private int clientTicks = -1;
@@ -195,6 +200,7 @@ public class ArmoryCoreEntity extends Entity {
         }
         if (t == Rite.CORE_START + 14) play(DoaSounds.ORB_RISE, c.add(0, 3, 0), 6f, 1f);
         if (t >= Rite.CORRUPT_START && t < Rite.RISE_START) repel(sw, t, false);
+        if (t >= Rite.CORRUPT_START && t <= Rite.CORRUPT_END + 2) inkGround(sw, Rite.corrupt(t, -1) * (Rite.ORB_RADIUS + 1.0));
         if (t >= Rite.RISE_START && t <= Rite.SEALED) {
             repel(sw, t, true);
             placeShell(sw, Rite.dome(t, -1) * 90.0 + 2.0);
@@ -212,6 +218,7 @@ public class ArmoryCoreEntity extends Entity {
         // the sphere sinks from the top down: lift the shell where the rim has passed
         double edge = Rite.dome(0, r) * 90.0 + 2.0;
         removeShellAbove(sw, edge);
+        if (r >= 20) restoreInk(sw, Rite.corrupt(0, r) * (Rite.ORB_RADIUS + 1.0));
         if (r == Rite.REL_ASCEND_START) {
             play(DoaSounds.ASCEND, getPos().add(0, 6, 0), 6f, 1f);
             restore(sw, pillarPlaced);
@@ -354,7 +361,85 @@ public class ArmoryCoreEntity extends Entity {
         map.clear();
     }
 
+    private void planInk(ServerWorld sw) {
+        inkPlan.clear();
+        inkDist.clear();
+        double R = Rite.ORB_RADIUS, cx = getX(), cy = getY(), cz = getZ();
+        record Cell(BlockPos pos, double d) {
+        }
+        List<Cell> cells = new ArrayList<>();
+        int r = (int) Math.ceil(R);
+        int fy = MathHelper.floor(cy);
+        for (int x = MathHelper.floor(cx) - r; x <= MathHelper.floor(cx) + r; x++)
+            for (int z = MathHelper.floor(cz) - r; z <= MathHelper.floor(cz) + r; z++) {
+                double dx = x + 0.5 - cx, dz = z + 0.5 - cz;
+                double h = Math.sqrt(dx * dx + dz * dz);
+                if (h > R + 0.7) continue;
+                for (int y = fy - 3; y <= fy + r; y++) {
+                    double dy = y + 0.5 - cy;
+                    // below the floor the ink reaches out under the wall; above it, everything inside the sphere
+                    if (y >= fy && Math.sqrt(h * h + dy * dy) > R - 0.9) break;
+                    cells.add(new Cell(new BlockPos(x, y, z), h));
+                }
+            }
+        cells.sort(Comparator.comparingDouble(Cell::d));
+        for (Cell c : cells) {
+            inkPlan.add(c.pos());
+            inkDist.add(c.d());
+        }
+    }
+
+    /** The corruption spreads: every block inside the sphere becomes ink stone, plants and loose things vanish. */
+    private void inkGround(ServerWorld sw, double radius) {
+        if (inkPlan.isEmpty()) planInk(sw);
+        int fy = MathHelper.floor(getY());
+        for (int k = 0; k < inkPlan.size(); k++) {
+            if (inkDist.get(k) > radius) break;
+            BlockPos p = inkPlan.get(k);
+            long key = p.asLong();
+            if (inked.containsKey(key) || placed.containsKey(key) || pillarPlaced.containsKey(key)) continue;
+            BlockState s = sw.getBlockState(p);
+            if (s.isOf(DoaBlocks.ORB_SHELL) || s.isOf(DoaBlocks.INK_STONE) || sw.getBlockEntity(p) != null) continue;
+            BlockState to;
+            if (s.isAir()) {
+                if (p.getY() != fy - 1) continue;
+                to = DoaBlocks.INK_STONE.getDefaultState();
+            } else if (!s.getFluidState().isEmpty() && s.getCollisionShape(sw, p).isEmpty()) {
+                to = p.getY() < fy ? DoaBlocks.INK_STONE.getDefaultState() : net.minecraft.block.Blocks.AIR.getDefaultState();
+            } else if (s.getCollisionShape(sw, p).isEmpty() || s.isReplaceable()) {
+                to = net.minecraft.block.Blocks.AIR.getDefaultState();
+            } else {
+                to = DoaBlocks.INK_STONE.getDefaultState();
+            }
+            inked.put(key, s);
+            sw.setBlockState(p, to, QUIET);
+        }
+    }
+
+    private void restoreInk(ServerWorld sw, double radius) {
+        if (inked.isEmpty()) return;
+        var it = inked.entrySet().iterator();
+        List<Map.Entry<Long, BlockState>> back = new ArrayList<>();
+        while (it.hasNext()) {
+            Map.Entry<Long, BlockState> e = it.next();
+            BlockPos p = BlockPos.fromLong(e.getKey());
+            double dx = p.getX() + 0.5 - getX(), dz = p.getZ() + 0.5 - getZ();
+            if (Math.sqrt(dx * dx + dz * dz) >= radius) {
+                back.add(e);
+                it.remove();
+            }
+        }
+        // solid ground first so plants and two-part blocks have something to stand on
+        back.sort(Comparator.comparingInt(e -> BlockPos.fromLong(e.getKey()).getY()));
+        for (Map.Entry<Long, BlockState> e : back) {
+            BlockPos p = BlockPos.fromLong(e.getKey());
+            BlockState cur = sw.getBlockState(p);
+            if (cur.isOf(DoaBlocks.INK_STONE) || cur.isAir()) sw.setBlockState(p, e.getValue(), QUIET);
+        }
+    }
+
     private void cleanup(ServerWorld sw) {
+        restoreInk(sw, -1);
         restore(sw, placed);
         restore(sw, pillarPlaced);
     }
@@ -440,6 +525,7 @@ public class ArmoryCoreEntity extends Entity {
         }
         readStates(nbt.getList("Shell", NbtElement.COMPOUND_TYPE), placed);
         readStates(nbt.getList("PillarBlocks", NbtElement.COMPOUND_TYPE), pillarPlaced);
+        readStates(nbt.getList("Ink", NbtElement.COMPOUND_TYPE), inked);
         if (this.dataTracker.get(TICKS) >= Rite.SEAL) planShell();
     }
 
@@ -451,6 +537,7 @@ public class ArmoryCoreEntity extends Entity {
         if (groundKnown) nbt.putIntArray("Ground", groundY.clone());
         nbt.put("Shell", writeStates(placed));
         nbt.put("PillarBlocks", writeStates(pillarPlaced));
+        nbt.put("Ink", writeStates(inked));
     }
 
     private static NbtList writeStates(Map<Long, BlockState> map) {

@@ -254,12 +254,54 @@ def s_call():
     return hall(out, 1.3, 0.45)
 
 
+def hichiriki(f_curve, d):
+    """Gagaku double reed: a buzzing, nasal, piercing tone that slides (enbai) between pitches."""
+    t = t_of(d)
+    f = f_curve(t) * (1 + 0.009 * np.sin(2 * np.pi * 6.1 * t) * np.clip(t / 0.4, 0, 1))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    reed = sum(np.sin(k * ph) * (1.0 / k ** 0.8) for k in range(1, 24))
+    reed = np.tanh(reed * 1.6)
+    nasal = bp(reed, 900, 1700, 2) * 1.4 + bp(reed, 2400, 3400, 2) * 0.6 + lp(reed, 700) * 0.5
+    breath = bp(noise(d), 1500, 6000) * 0.08
+    return (nasal + breath) * 0.5
+
+
+def tamtam(d, f0=62):
+    """Great gong: dense inharmonic partials whose highs bloom slowly after the strike."""
+    t = t_of(d)
+    x = np.zeros_like(t)
+    for _ in range(60):
+        f = f0 * np.exp(RNG.uniform(0, 4.2))
+        bloom = np.clip(t / RNG.uniform(0.05, 0.9), 0, 1) ** 2
+        x += np.sin(2 * np.pi * f * t + RNG.uniform(0, 6.28)) * bloom * np.exp(-t / RNG.uniform(1.5, 5)) / (1 + f / 900)
+    return x * 0.12
+
+
 def s_descend():
-    d = 2.6
+    # 1.3 s from the armory to the earth: everything swells into the moment of impact
+    d = 1.75
+    hit = 1.3
     out = canvas(d)
-    put(out, shakuhachi(lambda t: note(5) * 2 ** ((t / d) ** 1.4 * 1.6), d, 0.6), 0, 0.7)
-    put(out, wind(d, 200, 2600) * swell(d, 1.8), 0, 0.9)
-    return hall(out, 0.8, 0.3)
+    # the reed's cry, sliding down from the heavens
+    cry = hichiriki(lambda t: note(17) * 2 ** (-(np.clip(t / hit, 0, 1) ** 1.6) * 1.0), hit + 0.08)
+    cry *= np.clip(t_of(hit + 0.08) / 0.12, 0, 1) * (0.4 + 0.6 * (t_of(hit + 0.08) / hit))
+    put(out, cry, 0, 0.75)
+    # a struck great gong played backwards: it blooms toward the impact
+    g = tamtam(2.2)[::-1]
+    put(out, g[-int(hit * SR):], 0, 1.0)
+    # the air tearing open, a low roar thickening
+    roar = lp(noise(hit), 380, 3) * swell(hit, 2.2) * 3.0 + bp(noise(hit), 700, 3000) * swell(hit, 3.0) * 0.7
+    put(out, roar, 0, 0.8)
+    # an accelerating taiko roll driving into the strike
+    k = 0
+    tt = 0.2
+    while tt < hit - 0.03:
+        put(out, taiko(70 + k * 1.5, 0.6, 0.5 + 0.6 * tt / hit), tt, 0.25 + 0.55 * (tt / hit) ** 2)
+        tt += 0.22 * (1 - tt / hit) + 0.035
+        k += 1
+    # wooden clapper crack right at the moment it plants
+    put(out, hyoshigi(0.45), hit - 0.02, 0.9)
+    return hall(out, 0.9, 0.3)
 
 
 def s_impact():

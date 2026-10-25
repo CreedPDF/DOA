@@ -24,6 +24,17 @@ public final class DoaBlocks {
                     .suffocates((state, world, pos) -> false)
                     .blockVision((state, world, pos) -> false)));
 
+    /** What the ground inside the dark sphere becomes: black ink stone with faintly breathing veins. */
+    public static final Block INK_STONE = Registry.register(Registries.BLOCK, DoaMod.id("ink_stone"),
+            new Block(AbstractBlock.Settings.create()
+                    .mapColor(net.minecraft.block.MapColor.BLACK)
+                    .strength(-1.0f, 3600000.0f)
+                    .dropsNothing()
+                    .luminance(state -> 2)
+                    .sounds(BlockSoundGroup.DEEPSLATE)
+                    .pistonBehavior(PistonBehavior.BLOCK)
+                    .allowsSpawning((state, world, pos, type) -> false)));
+
     private DoaBlocks() {
     }
 

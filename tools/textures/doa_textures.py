@@ -6,7 +6,7 @@ Everything is hand-made here from noise and the brushed kanji masks in tools/gly
   effect/     brush_trail (falling light stroke), seal_<id> (summoning circle per pillar),
               ink_ring (brushed shockwave ring), light_column (descending heavenly light),
               orb_skin (the corruption orb's surface), orb_edge (its burning rim)
-  gui/        impact_0..2 (rugged ink impact frames), label/<id> (floating name kanji)
+  gui/        label/<id> (floating name kanji); impact frames live in impact_frames.py
   item/       summon_talisman (the ofuda that calls the armory)
 """
 import math
@@ -197,54 +197,6 @@ def effects():
 
 # ------------------------------------------------------------------------------------------ gui
 
-def impact_frames():
-    """Rugged, hand-made impact frames: radiating dry-brush speed strokes, ink blots, paper grain."""
-    W, H = 640, 360
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-    for k in range(3):
-        rr = np.random.default_rng(900 + k)
-        cx, cy = W / 2 + rr.uniform(-40, 40), H / 2 + rr.uniform(-25, 25)
-        dx, dy = xx - cx, yy - cy
-        r = np.hypot(dx / W, dy / H) * 2
-        ang = np.arctan2(dy, dx)
-        # radiating strokes: angular noise stretched along the radius
-        a_n = noise(1, 2048, 6 + k * 3, 910 + k, 3)[0]
-        ai = ((ang + math.pi) / (2 * math.pi) * 2047).astype(int)
-        strokes = a_n[ai]
-        strokes = np.clip((strokes - 0.48 + 0.25 * r) * 4, 0, 1)
-        grain = noise(H, W, 3, 920 + k, 2)
-        light = np.clip(1.25 - r * (1.1 + 0.25 * grain), 0, 1)
-        white = np.clip(light * (1 - strokes * 0.85), 0, 1)
-        # ink blots and spatter thrown out from the centre
-        blot = np.zeros((H, W), np.float32)
-        for _ in range(14):
-            a = rr.uniform(0, 2 * math.pi)
-            d = rr.uniform(0.35, 0.95)
-            bx, by = cx + math.cos(a) * d * W / 2, cy + math.sin(a) * d * H / 2
-            rad = rr.uniform(10, 46)
-            n = noise(H, W, 12, 930 + k * 50 + _, 2)
-            blot = np.maximum(blot, np.clip((rad * (0.7 + 0.6 * n) - np.hypot(xx - bx, yy - by)) / 4, 0, 1))
-        for _ in range(220):
-            a = rr.uniform(0, 2 * math.pi)
-            d = rr.uniform(0.2, 1.1)
-            bx, by = cx + math.cos(a) * d * W / 2, cy + math.sin(a) * d * H / 2
-            rad = rr.uniform(1, 4)
-            x0, x1 = int(max(0, bx - 6)), int(min(W, bx + 7))
-            y0, y1 = int(max(0, by - 6)), int(min(H, by + 7))
-            if x0 >= x1 or y0 >= y1:
-                continue
-            sub = np.clip(rad - np.hypot(xx[y0:y1, x0:x1] - bx, yy[y0:y1, x0:x1] - by), 0, 1)
-            blot[y0:y1, x0:x1] = np.maximum(blot[y0:y1, x0:x1], sub)
-        white = np.clip(white * (1 - blot), 0, 1)
-        # rough torn border
-        border = noise(H, W, 10, 940 + k, 3)
-        frame = np.minimum.reduce([xx / W, (W - xx) / W, yy / H, (H - yy) / H]) * 12
-        white *= np.clip(frame + (border - 0.5) * 0.8, 0, 1)
-        # the frame is opaque: white (tinted to the pillar's colour in game) over black ink
-        rgba = np.dstack([white, white, white, np.ones_like(white)])
-        save(rgba, f"gui/impact_{k}.png")
-
-
 def labels():
     for pid in IDS:
         g = glyph(pid, 224)
@@ -294,7 +246,6 @@ def additive():
 if __name__ == "__main__":
     particles()
     effects()
-    impact_frames()
     labels()
     item()
     additive()

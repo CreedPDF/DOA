@@ -47,6 +47,24 @@ for pid in IDS:
         if not q.exists():
             errors.append(f"{q} missing")
 
+for name in ("planet", "ring"):
+    p = A / f"models/space/{name}.json"
+    if not p.exists():
+        errors.append(f"space mesh {name}.json missing")
+        continue
+    m = json.loads(p.read_text())
+    nv = len(m["verts"]) // 8
+    if len(m["verts"]) % 8 or len(m["quads"]) % 4 or max(m["quads"]) >= nv:
+        errors.append(f"space mesh {name}.json malformed")
+    print(f"{name}.json: {nv} corners, {len(m['quads']) // 4} quads")
+for t in ("earth", "earth_clouds", "earth_night", "moon", "giant", "ring", "milkyway", "glare", "white"):
+    if not (A / f"textures/space/{t}.png").exists():
+        errors.append(f"space texture {t}.png missing")
+for pid in IDS:
+    for k in range(4):
+        if not (A / f"textures/gui/impact/{pid}_{k}.png").exists():
+            errors.append(f"impact frame {pid}_{k}.png missing")
+
 if errors:
     for e in errors:
         print(f"::error title=Asset validation::{e}")
