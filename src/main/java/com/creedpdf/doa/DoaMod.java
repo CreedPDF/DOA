@@ -26,6 +26,7 @@ public class DoaMod implements ModInitializer {
         DoaEntities.init();
         DoaItems.init();
         DoaParticles.init();
+        com.creedpdf.doa.net.DoaNet.init();
         LOG.info("The Orbital Armory is listening.");
     }
 }

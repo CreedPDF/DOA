@@ -143,7 +143,7 @@ public final class Fx {
         float[] c = Pillars.COLOR[i];
         for (int n = 0; n < 50; n++) {
             double a = rnd.nextDouble() * Math.PI * 2, rr = 0.6 + rnd.nextDouble() * 0.7;
-            spawn(Kind.MOTE, b.x + Math.cos(a) * rr, b.y + 10.2 + (rnd.nextDouble() - 0.5) * 1.4, b.z + Math.sin(a) * rr,
+            spawn(Kind.MOTE, b.x + Math.cos(a) * rr, b.y + 16.7 + (rnd.nextDouble() - 0.5) * 1.4, b.z + Math.sin(a) * rr,
                     Math.cos(a) * 0.04, 0.02, Math.sin(a) * 0.04, bright(c, 0.35f), 1f, 0.12f, 30 + rnd.nextInt(20), -0.001f, 0.95f, true, 0, -0.5f, 0);
         }
     }
@@ -172,7 +172,7 @@ public final class Fx {
         for (int i = 0; i < Pillars.COUNT; i++) {
             Vec3d b = core.pillarBase(i);
             float[] col = Pillars.COLOR[i];
-            if (Rite.falling(i, t)) {
+            if (Rite.falling(i, t) && Rite.plunge(i, t) > 0) {
                 double h = Rite.fallHeight(i, t);
                 for (int n = 0; n < 6; n++) {
                     spawn(Kind.SPARK, b.x + rnd.nextGaussian() * 0.6, b.y + h + 1 + rnd.nextDouble() * 9, b.z + rnd.nextGaussian() * 0.6,
@@ -193,7 +193,7 @@ public final class Fx {
             }
         }
         double core3 = Rite.core(t, -1);
-        Vec3d orb = c.add(0, 3.6, 0);
+        Vec3d orb = c.add(0, 5, 0);
         if (core3 > 0.02) {
             for (int n = 0; n < 5; n++) {
                 Vec3d d = new Vec3d(rnd.nextGaussian(), rnd.nextGaussian() * 0.6, rnd.nextGaussian()).normalize().multiply(3.5 + rnd.nextDouble() * 3);

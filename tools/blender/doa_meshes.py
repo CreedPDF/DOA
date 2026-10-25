@@ -208,7 +208,7 @@ def stone_mat(name, base=(0.035, 0.033, 0.038), vein=(0.11, 0.1, 0.12), scale=2.
     n2 = m.noise(scale * 6, 4, 0.5)
     vor = m.n("ShaderNodeTexVoronoi", Scale=scale * 1.4, _feature="DISTANCE_TO_EDGE")
     m.link(m.coord.outputs["Object"], vor.inputs["Vector"])
-    cracks = m.math("LESS_THAN", vor.outputs["Distance"], 0.025)
+    cracks = m.math("LESS_THAN", vor.outputs["Distance"], 0.012)
     col = m.ramp(n1.outputs["Fac"], [(0.3, base), (0.55, tuple(c * 1.6 for c in base)), (0.78, vein)])
     col = m.mix(col, m.ramp(n2.outputs["Fac"], [(0.4, (0.0, 0.0, 0.0)), (0.7, (0.07, 0.07, 0.075))]), 0.35, "ADD")
     col = m.mix(col, (0.006, 0.005, 0.006), cracks)
@@ -217,7 +217,6 @@ def stone_mat(name, base=(0.035, 0.033, 0.038), vein=(0.11, 0.1, 0.12), scale=2.
     col = m.mix(col, (0.2, 0.19, 0.2), m.math("MULTIPLY", edge, 0.25, True))
     col = m.mix(col, (0.0, 0.0, 0.0), m.math("MULTIPLY", m.math("SUBTRACT", 1.0, m.ao(0.6)), 0.6, True))
     m.color(col)
-    m.glow(m.ramp(cracks, [(0.0, (0, 0, 0)), (1.0, (0.18, 0.18, 0.18))]))
     return m
 
 
@@ -428,7 +427,7 @@ def build_pillar(assets, out):
     reset()
     stone = stone_mat("pillar_stone")
     # glowing channels inlaid along the shaft
-    ch = channel_glow(stone, [("Z", 0.9, 0.035)])
+    ch = channel_glow(stone, [("Z", 2.3, 0.03)])
     stone.glow(stone.ramp(ch, [(0.0, (0, 0, 0)), (1.0, (1, 1, 1))]))
     gold = gold_mat("pillar_gold")
     gem = glow_mat("pillar_gem", (0.95, 0.95, 0.95), 1.0)

@@ -1,11 +1,7 @@
 {
-  "item.doa.summon_talisman": "Talisman of Summoning",
-  "item.doa.summon_talisman.tip1": "召  Calls down the Orbital Armory",
-  "item.doa.summon_talisman.tip2": "Use to summon the seven pillars. Inside the sealed sphere: look at a relic and use to awaken it, sneak + use to break the seal.",
-  "item.doa.summon_talisman.tip3": "Death, Redemption, Wrath, Soul, Fate, Silence, Void.",
   "block.doa.orb_shell": "Wall of the Dark Sphere",
   "entity.doa.armory_core": "Orbital Armory",
-  "message.doa.call": "召  The Orbital Armory answers...",
+  "message.doa.call": "召  The Orbital Armory answers",
   "message.doa.in_progress": "The rite is not yet complete.",
   "message.doa.release": "The seal is broken. The pillars return to the heavens.",
   "message.doa.releasing": "The pillars are already returning.",
@@ -23,7 +19,7 @@
   "block.doa.ink_stone": "Ink Stone",
   "message.doa.look": "Look at a relic to awaken it  -  sneak + use to break the seal.",
   "message.doa.busy": "A relic is already awake.",
-  "message.doa.cooldown": "That relic is resting (%s s).",
+  "message.doa.cooldown": "That relic is resting (%s s)",
   "subtitles.doa.verdict": "Death passes judgement",
   "subtitles.doa.absolution": "Heaven's light descends",
   "subtitles.doa.war_drums": "War drums of heaven",
@@ -34,5 +30,9 @@
   "subtitles.doa.fate_strike": "The stars strike",
   "subtitles.doa.silence": "A great bell tolls",
   "subtitles.doa.void_open": "The void opens",
-  "subtitles.doa.void_collapse": "The void collapses"
+  "subtitles.doa.void_collapse": "The void collapses",
+  "item.doa.armory_staff": "Staff of the Orbital Armory",
+  "item.doa.armory_staff.tip1": "召  Hold use to charge, and the Orbital Armory answers",
+  "item.doa.armory_staff.tip2": "Inside the sealed sphere: look at a relic and use to awaken its move, sneak + use to break the seal.",
+  "item.doa.armory_staff.tip3": "Eclipse, Dawn, Planetbreaker, Heart of the World, Beyond, Moonrise, Rift."
 }

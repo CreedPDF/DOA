@@ -17,6 +17,7 @@ public class DoaModels implements SimpleSynchronousResourceReloadListener {
     public static DoaModel RELIC;
     public static DoaMesh PLANET;
     public static DoaMesh RING;
+    public static DoaMeshSet PILLAR2, PANEL, STAFF, ENGINE, GATE, FRAGMENTS;
 
     @Override
     public Identifier getFabricId() {
@@ -29,6 +30,28 @@ public class DoaModels implements SimpleSynchronousResourceReloadListener {
         RELIC = load(manager, "models/entity/relic.json");
         PLANET = loadMesh(manager, "models/space/planet.json");
         RING = loadMesh(manager, "models/space/ring.json");
+        PILLAR2 = loadSet(manager, "models/entity/pillar2.json");
+        PANEL = loadSet(manager, "models/entity/pillar_panel.json");
+        STAFF = loadSet(manager, "models/item/staff_mesh.json");
+        ENGINE = loadSet(manager, "models/entity/engine.json");
+        GATE = loadSet(manager, "models/entity/gate.json");
+        FRAGMENTS = loadSet(manager, "models/space/fragments.json");
+        com.creedpdf.doa.client.text.DoaFont.reload(manager);
+    }
+
+    private static DoaMeshSet loadSet(ResourceManager manager, String path) {
+        Identifier id = DoaMod.id(path);
+        Optional<Resource> res = manager.getResource(id);
+        if (res.isEmpty()) {
+            DoaMod.LOG.error("Missing DOA mesh {}", id);
+            return null;
+        }
+        try (Reader r = res.get().getReader()) {
+            return DoaMeshSet.parse(JsonParser.parseReader(r).getAsJsonObject());
+        } catch (Exception e) {
+            DoaMod.LOG.error("Failed to load DOA mesh {}", id, e);
+            return null;
+        }
     }
 
     private static DoaMesh loadMesh(ResourceManager manager, String path) {

@@ -4,12 +4,18 @@ import com.creedpdf.doa.Abilities;
 import com.creedpdf.doa.DoaMod;
 import com.creedpdf.doa.Pillars;
 import com.creedpdf.doa.Rite;
+import com.creedpdf.doa.client.cine.Cutscene;
+import com.creedpdf.doa.client.model.DoaMeshSet;
 import com.creedpdf.doa.client.model.DoaModel;
 import com.creedpdf.doa.client.model.DoaModels;
+import com.creedpdf.doa.client.move.Kit;
+import com.creedpdf.doa.client.move.Move;
+import com.creedpdf.doa.client.move.MoveCtx;
+import com.creedpdf.doa.client.move.Moves;
+import com.creedpdf.doa.client.text.DoaFont;
 import com.creedpdf.doa.entity.ArmoryCoreEntity;
-import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Frustum;
-import net.minecraft.client.render.LightmapTextureManager;
 import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
@@ -18,63 +24,52 @@ import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
 /**
- * Draws the whole rite from the armory's timeline: the seven falling pillars with their seals, light columns,
- * brush-stroke trails, shockwaves and floating names; the black core orb, the ink corruption spreading over the
- * ground, the opaque dark sphere rising with a burning ragged rim, its inner runes, and the relics the pillars release.
+ * Draws the rite from the armory's timeline: each pillar first as a flickering star high in the heavens, then its
+ * near-instant plunge, the impact, its name in DOA's lettering; the black core orb, the ink corruption over the
+ * ground, the opaque dark sphere with its burning ragged rim and inner runes; the relics; and the running move.
  */
 public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
-    private static final int FULL = LightmapTextureManager.MAX_LIGHT_COORDINATE;
+    private static final int FULL = Bill.FULL;
     private static final int OV = OverlayTexture.DEFAULT_UV;
 
-    static final Identifier[] PILLAR = new Identifier[Pillars.COUNT];
-    static final Identifier[] PILLAR_GLOW = new Identifier[Pillars.COUNT];
-    static final Identifier[] SEAL = new Identifier[Pillars.COUNT];
-    static final Identifier[] LABEL = new Identifier[Pillars.COUNT];
-    static final Identifier RELIC = DoaMod.id("textures/entity/relic.png");
-    static final Identifier RELIC_GLOW = DoaMod.id("textures/entity/relic_glow.png");
-    static final Identifier COLUMN = DoaMod.id("textures/effect/add_light_column.png");
-    static final Identifier TRAIL = DoaMod.id("textures/effect/add_brush_trail.png");
-    static final Identifier RING_ADD = DoaMod.id("textures/effect/add_ink_ring.png");
-    static final Identifier RING_INK = DoaMod.id("textures/effect/ink_ring.png");
-    static final Identifier SKIN = DoaMod.id("textures/effect/orb_skin.png");
-    static final Identifier EDGE = DoaMod.id("textures/effect/add_orb_edge.png");
-    static final Identifier EDGE_INK = DoaMod.id("textures/effect/orb_edge.png");
-    static final Identifier HALO = DoaMod.id("textures/effect/add_halo.png");
+    private static final Identifier BODY = DoaMod.id("textures/entity/pillar/body.png");
+    private static final Identifier BODY_GLOW = DoaMod.id("textures/entity/pillar/body_glow.png");
+    private static final Identifier[] PANEL = new Identifier[Pillars.COUNT];
+    private static final Identifier[] PANEL_GLOW = new Identifier[Pillars.COUNT];
+    private static final Identifier RELIC = DoaMod.id("textures/entity/relic.png");
+    private static final Identifier RELIC_GLOW = DoaMod.id("textures/entity/relic_glow.png");
+    private static final Identifier EDGE_INK = DoaMod.id("textures/effect/orb_edge.png");
 
     static {
         for (int i = 0; i < Pillars.COUNT; i++) {
-            String id = Pillars.ID[i];
-            PILLAR[i] = DoaMod.id("textures/entity/pillar/" + id + ".png");
-            PILLAR_GLOW[i] = DoaMod.id("textures/entity/pillar/" + id + "_glow.png");
-            SEAL[i] = DoaMod.id("textures/effect/add_seal_" + id + ".png");
-            LABEL[i] = DoaMod.id("textures/gui/label/add_" + id + ".png");
+            PANEL[i] = DoaMod.id("textures/entity/pillar/panel_" + Pillars.ID[i] + ".png");
+            PANEL_GLOW[i] = DoaMod.id("textures/entity/pillar/panel_" + Pillars.ID[i] + "_glow.png");
         }
     }
 
-    private static final int DOME_COLS = 96;
-    private static final double BAND = 3.0;
+    private static final int DOME_COLS = 128;
+    private static final double BAND = 2.5;
+    private static final double PILLAR_TOP = 14.3;
 
-    private final TextRenderer text;
     private double oculus;
 
     public ArmoryCoreRenderer(EntityRendererFactory.Context ctx) {
         super(ctx);
-        this.text = ctx.getTextRenderer();
         this.shadowRadius = 0;
     }
 
     @Override
     public Identifier getTexture(ArmoryCoreEntity entity) {
-        return SKIN;
+        return Kit.SKIN;
     }
 
     @Override
@@ -84,151 +79,165 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
 
     @Override
     public void render(ArmoryCoreEntity e, float yaw, float td, MatrixStack ms, VertexConsumerProvider vcp, int light) {
+        Bill.update(this.dispatcher.camera);
         int relI = e.getReleaseTicks();
         double t = e.getRiteTicks() + (relI >= 0 ? 0 : td);
         double rel = relI >= 0 ? relI + td : -1;
         double time = e.age + td;
         Vec3d origin = e.getLerpedPos(td);
         Vec3d cam = this.dispatcher.camera.getPos().subtract(origin);
-
-        for (int i = 0; i < Pillars.COUNT; i++) {
-            if (!Rite.visible(i, t + 12)) continue;
-            Vec3d b = e.pillarBase(i).subtract(origin);
-            renderSeal(e, i, b, t, rel, time, ms, vcp);
-            if (!Rite.visible(i, t)) continue;
-            renderPillar(e, i, b, t, rel, time, ms, vcp, cam);
+        MoveCtx mc = null;
+        Move move = null;
+        if (e.getAbility() >= 0) {
+            move = Moves.get(e.getAbility());
+            mc = new MoveCtx(e, e.getAbilityTicks() + td, td, time, ms, vcp, origin, cam, Cutscene.isAbilityCutscene(e));
         }
-        if (rel < 0 || Rite.dome(t, rel) > 0) {
-            renderCore(t, rel, time, ms, vcp);
-            renderCorruption(t, rel, time, ms, vcp);
-            oculus = AbilityRenderer.oculus(e, td);
-            renderDome(t, rel, time, ms, vcp);
+        boolean pocket = mc != null && mc.mine && Moves.inPocket(e.getAbility(), mc.a);
+        if (!pocket) {
+            MoveCtx base = new MoveCtx(e, 0, td, time, ms, vcp, origin, cam, false);
+            for (int i = 0; i < Pillars.COUNT; i++) {
+                if (!Rite.visible(i, t + 14)) continue;
+                Vec3d b = e.pillarBase(i).subtract(origin);
+                renderSeal(i, b, t, rel, time, ms, vcp);
+                if (!Rite.visible(i, t)) continue;
+                renderPillar(e, base, i, b, t, rel, time, ms, vcp, cam);
+            }
+            if (rel < 0 || Rite.dome(t, rel) > 0) {
+                renderCore(t, rel, time, ms, vcp);
+                renderCorruption(t, rel, time, ms, vcp);
+                oculus = move != null ? move.oculus(mc.a) : 0;
+                renderDome(t, rel, time, ms, vcp);
+            }
+            if (t >= Rite.SEALED) for (int i = 0; i < Pillars.COUNT; i++) renderRelic(e, i, origin, t, rel, time, ms, vcp);
         }
-        if (t >= Rite.SEALED) {
-            for (int i = 0; i < Pillars.COUNT; i++) renderRelic(e, i, e.pillarBase(i).subtract(origin), t, rel, time, ms, vcp);
-        }
-        AbilityRenderer.render(e, td, ms, vcp, origin, cam, this.dispatcher);
+        if (move != null) move.render(mc);
         super.render(e, yaw, td, ms, vcp, light);
     }
 
     // ------------------------------------------------------------------------------------------------ pillars
 
-    private void renderSeal(ArmoryCoreEntity e, int i, Vec3d b, double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
+    private void renderSeal(int i, Vec3d b, double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
         float[] c = Pillars.COLOR[i];
         double u = t - Rite.spawn(i);
-        float grow = Rite.easeOut((u + 12) / 22.0);
-        float flash = (float) Math.exp(-Math.max(0, t - Rite.land(i)) / 6.0) * (Rite.landed(i, t) ? 1 : 0);
-        float charge = Rite.landed(i, t) ? 0 : Rite.smooth((u + 12) / (Rite.FALL + 12.0));
-        float rest = Rite.landed(i, t) ? 0.45f + 0.1f * MathHelper.sin((float) time * 0.08f + i) : 0;
-        float k = (charge * 0.9f + flash * 1.6f + rest);
+        float grow = Rite.easeOut((u + 14) / 30.0);
+        boolean landed = Rite.landed(i, t);
+        float flash = landed ? (float) Math.exp(-(t - Rite.land(i)) / 6.0) : 0;
+        float charge = landed ? 0 : Rite.smooth((u + 14) / (Rite.FALL + 14.0)) * (0.6f + 0.4f * (float) Math.sin(time * 0.9));
+        float rest = landed ? 0.45f + 0.1f * MathHelper.sin((float) time * 0.08f + i) : 0;
+        float k = charge * 0.9f + flash * 1.8f + rest;
         if (rel >= 0) k *= 1 - Rite.smooth((rel - 30) / 40.0);
         if (k <= 0.01f) return;
-        double r = 3.3 * grow + flash * 0.8;
-        ms.push();
-        ms.translate(b.x, b.y + 0.06, b.z);
-        ms.multiply(new Quaternionf().rotateY((float) (time * 0.012 + i)));
-        VertexConsumer vc = vcp.getBuffer(RenderLayer.getEyes(SEAL[i]));
-        flat(vc, ms, r, c[0] * k, c[1] * k, c[2] * k);
-        ms.pop();
+        double r = 4.6 * grow + flash * 1.2;
+        VertexConsumer vc = vcp.getBuffer(RenderLayer.getEyes(Kit.SEAL[i]));
+        float cs = (float) Math.cos(time * 0.012 + i), sn = (float) Math.sin(time * 0.012 + i);
+        Bill.plane(vc, ms, b.x, b.y + 0.06, b.z, new float[]{cs, 0, sn}, new float[]{-sn, 0, cs}, (float) r, c[0] * k, c[1] * k, c[2] * k, 1);
     }
 
-    private void renderPillar(ArmoryCoreEntity e, int i, Vec3d b, double t, double rel, double time, MatrixStack ms,
+    private void renderPillar(ArmoryCoreEntity e, MoveCtx base, int i, Vec3d b, double t, double rel, double time, MatrixStack ms,
                               VertexConsumerProvider vcp, Vec3d cam) {
         float[] c = Pillars.COLOR[i];
         boolean landed = Rite.landed(i, t);
         double h = landed ? 0 : Rite.fallHeight(i, t);
         double after = t - Rite.land(i);
-        if (landed && after < 10) h -= 0.35 * Math.sin(after / 10.0 * Math.PI) * Math.exp(-after / 6);
+        if (landed && after < 10) h -= 0.45 * Math.sin(after / 10.0 * Math.PI) * Math.exp(-after / 6);
         if (rel >= 0) h += Rite.ascend(rel);
-        double faceYaw = Math.PI - Rite.angle(i);
 
-        // the pillar itself
-        DoaModel model = DoaModels.PILLAR;
+        // ---- the star: so high and so fast it reads as a flickering star until the last instant
+        if (!landed && rel < 0) {
+            Vec3d head = b.add(0, h, 0);
+            Vec3d d = head.subtract(cam);
+            double dist = d.length();
+            Vec3d drawAt = dist > 70 ? cam.add(d.multiply(70 / dist)) : head;
+            float pl = Rite.plunge(i, t);
+            double u = t - Rite.spawn(i);
+            float flick = (float) (0.55 + 0.45 * Math.abs(Math.sin(u * 1.9 + i) * Math.sin(u * 3.7 + i * 2)));
+            float appear = Rite.smooth(u / 6.0);
+            float size = dist > 70 ? (float) ((1.3 + 0.5 * Math.sin(u * 0.6)) * appear * (1 + pl * 2.5)) : (float) (2.5 + pl * 3);
+            VertexConsumer gl = vcp.getBuffer(RenderLayer.getEyes(Cosmos.GLARE));
+            Bill.sprite(gl, ms, drawAt.x, drawAt.y, drawAt.z, size * 3.2f, (float) (u * 0.05), c[0] * flick, c[1] * flick, c[2] * flick);
+            Bill.sprite(gl, ms, drawAt.x, drawAt.y, drawAt.z, size * 1.1f, 0, flick, flick, flick);
+            if (pl > 0) {
+                VertexConsumer sv = vcp.getBuffer(RenderLayer.getEyes(Kit.TRAIL));
+                double top = Math.min(h + 160 * (1 - pl * 0.3), Rite.FALL_HEIGHT);
+                double bottom = h + PILLAR_TOP * 0.5;
+                Bill.ribbon(sv, ms, b.x, b.y + top, b.z, b.x, b.y + bottom, b.z, cam.x, cam.y, cam.z, 2.4f, c[0] * 1.4f, c[1] * 1.4f, c[2] * 1.4f, 1, 0, 1);
+                Bill.ribbon(sv, ms, b.x, b.y + top, b.z, b.x, b.y + bottom, b.z, cam.x, cam.y, cam.z, 0.7f, 1.3f, 1.3f, 1.2f, 1, 0, 1);
+            }
+            float ck = Rite.smooth((u - 6) / 16.0) * 0.6f + pl;
+            Kit.column(base, Kit.COLUMN, b, 0.9 + pl, 0, 110, c[0] * ck, c[1] * ck, c[2] * ck);
+            if (h > 140) return;
+        }
+
+        // ---- the pillar itself
+        DoaMeshSet model = DoaModels.PILLAR2, panel = DoaModels.PANEL;
         if (model != null) {
             ms.push();
             ms.translate(b.x, b.y + h, b.z);
-            ms.multiply(new Quaternionf().rotateY((float) faceYaw));
-            int light = landed && rel < 0 ? WorldRenderer.getLightmapCoordinates(e.getWorld(),
-                    BlockPos.ofFloored(e.pillarBase(i).add(0, 1.5, 0))) : FULL;
-            light = Math.max(light & 0xFFFF, 0x60) | (light & 0xFFFF0000);
-            DoaModel.Poser poser = (bone, rot, off) -> {
-                if (bone.equals("finial")) {
-                    rot[1] = (float) (time * 0.03);
-                    off[1] = (float) Math.sin(time * 0.05 + i) * 0.6f;
+            ms.multiply(RotationAxis.POSITIVE_Y.rotation((float) (Math.PI - Rite.angle(i))));
+            int light = landed && rel < 0 ? WorldRenderer.getLightmapCoordinates(e.getWorld(), BlockPos.ofFloored(e.pillarBase(i).add(0, 2, 0))) : FULL;
+            light = Math.max(light & 0xFFFF, 0x70) | (light & 0xFFFF0000);
+            DoaMeshSet.Pose pose = (n, m) -> {
+                if (n.equals("rings")) {
+                    m.translate(0, Math.sin(time * 0.04 + i) * 0.15, 0);
+                    m.multiply(RotationAxis.POSITIVE_Y.rotation((float) (time * 0.02 + i)));
+                } else if (n.equals("crystal")) {
+                    m.translate(0, Math.sin(time * 0.05 + i) * 0.25, 0);
+                    m.multiply(RotationAxis.POSITIVE_Y.rotation((float) (-time * 0.035)));
                 }
+                return true;
             };
-            model.render(ms, vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(PILLAR[i])), light, OV, 1, 1, 1, 1, poser);
-            float pulse = landed ? 0.75f + 0.25f * MathHelper.sin((float) time * 0.11f + i * 0.9f) : 1.0f;
-            if (landed && after < 12) pulse += (float) (1.2 * Math.exp(-after / 4));
-            model.render(ms, vcp.getBuffer(RenderLayer.getEyes(PILLAR_GLOW[i])), FULL, OV, pulse, pulse, pulse, 1, poser);
+            model.render(ms, vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(BODY)), light, pose, null);
+            float pulse = landed ? 0.75f + 0.25f * MathHelper.sin((float) time * 0.11f + i * 0.9f) : 1.2f;
+            if (landed && after < 12) pulse += (float) (1.4 * Math.exp(-after / 4));
+            final float pk = pulse;
+            model.render(ms, vcp.getBuffer(RenderLayer.getEyes(BODY_GLOW)), FULL, pose, (p, f, nx, ny, nz, o) -> {
+                float k = p.equals("crystal") ? pk * 1.3f : pk;
+                o[0] = c[0] * k;
+                o[1] = c[1] * k;
+                o[2] = c[2] * k;
+                o[3] = 1;
+            });
+            if (panel != null) {
+                panel.render(ms, vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(PANEL[i])), light, null, null);
+                panel.render(ms, vcp.getBuffer(RenderLayer.getEyes(PANEL_GLOW[i])), FULL, null, (p, f, nx, ny, nz, o) -> {
+                    o[0] = c[0] * pk * 1.2f;
+                    o[1] = c[1] * pk * 1.2f;
+                    o[2] = c[2] * pk * 1.2f;
+                    o[3] = 1;
+                });
+            }
             ms.pop();
         }
 
-        // descending light: the heavenly column and the brush stroke trailing the pillar
-        if (!landed || after < 30 || rel >= Rite.REL_ASCEND_START) {
-            float ck;
-            if (rel >= Rite.REL_ASCEND_START) ck = 0.8f * (1 - Rite.smooth((rel - Rite.REL_END + 25) / 20.0));
-            else if (!landed) ck = Rite.smooth((t - Rite.spawn(i) + 6) / 14.0);
-            else ck = (float) Math.exp(-after / 9.0) * 1.4f;
-            if (ck > 0.01f) {
-                VertexConsumer vc = vcp.getBuffer(RenderLayer.getEyes(COLUMN));
-                column(vc, ms, b, cam, 0.9 + (landed ? 0.6 * Math.exp(-after / 5) : 0), 0, 90, c[0] * ck, c[1] * ck, c[2] * ck, 1, 0);
-                column(vc, ms, b, cam, 0.35, 0, 90, ck * 0.9f, ck * 0.9f, ck * 0.85f, 1, 0);
-            }
-        }
-        if (!landed && rel < 0) {
-            VertexConsumer vc = vcp.getBuffer(RenderLayer.getEyes(TRAIL));
-            double y0 = b.y + h + 9.0;
-            column(vc, ms, new Vec3d(b.x, 0, b.z), cam, 1.7, y0, y0 + 34, c[0] * 1.2f, c[1] * 1.2f, c[2] * 1.2f, 1, 0);
+        // ---- impact light and shockwave
+        if (landed && after < 30 && rel < 0) {
+            float ck = (float) Math.exp(-after / 9.0) * 1.5f;
+            Kit.column(base, Kit.COLUMN, b, 1.2 + 0.9 * Math.exp(-after / 5), 0, 110, c[0] * ck, c[1] * ck, c[2] * ck);
+            float k = Rite.clamp01(after / 24.0);
+            Kit.shock(base, b, 1 + 15 * Rite.easeOut(k), (1 - k) * (1 - k), c);
         }
         if (rel >= Rite.REL_ASCEND_START) {
-            VertexConsumer vc = vcp.getBuffer(RenderLayer.getEyes(TRAIL));
-            double y0 = b.y + h - 30;
-            column(vc, ms, new Vec3d(b.x, 0, b.z), cam, 1.4, y0, y0 + 30, c[0], c[1], c[2], 0, 1);
+            VertexConsumer sv = vcp.getBuffer(RenderLayer.getEyes(Kit.TRAIL));
+            Bill.ribbon(sv, ms, b.x, b.y + h - 40, b.z, b.x, b.y + h, b.z, cam.x, cam.y, cam.z, 1.6f, c[0], c[1], c[2], 1, 0, 1);
         }
 
-        // the shockwave: a brushed ink ring and a ring of light racing out over the ground
-        if (landed && after < 22 && rel < 0) {
-            float k = Rite.clamp01(after / 22.0);
-            double r = 1 + 10 * Rite.easeOut(k);
-            float a = (1 - k) * (1 - k);
-            ms.push();
-            ms.translate(b.x, b.y + 0.1, b.z);
-            ms.multiply(new Quaternionf().rotateY(i * 0.7f));
-            flatColor(vcp.getBuffer(RenderLayer.getEntityTranslucent(RING_INK)), ms, r * 0.92, 0.02f, 0.015f, 0.02f, a * 0.9f);
-            ms.translate(0, 0.03, 0);
-            flat(vcp.getBuffer(RenderLayer.getEyes(RING_ADD)), ms, r, c[0] * a * 1.5f, c[1] * a * 1.5f, c[2] * a * 1.5f);
-            ms.pop();
-        }
-
-        // the name: the brushed kanji in light with the word beneath, after it has planted
+        // ---- the name: the kanji and the word, in DOA's own lettering
         double nameAt = after - 6;
         if (landed && nameAt > 0) {
             float a = Rite.smooth(nameAt / 12.0);
             if (rel >= 0) a *= 1 - Rite.smooth(rel / 25.0);
             if (a > 0.01f) {
-                float bob = (float) Math.sin(time * 0.06 + i) * 0.08f;
-                ms.push();
-                ms.translate(b.x, b.y + h + 11.0 + bob, b.z);
-                ms.multiply(this.dispatcher.getRotation());
+                float bob = (float) Math.sin(time * 0.06 + i) * 0.1f;
                 float burst = (float) Math.exp(-nameAt / 5.0);
-                float s = 0.75f + burst * 1.6f;
                 float k = a * (1 + burst * 1.5f);
-                billboard(vcp.getBuffer(RenderLayer.getEyes(LABEL[i])), ms, s, c[0] * k, c[1] * k, c[2] * k);
-                billboard(vcp.getBuffer(RenderLayer.getEyes(LABEL[i])), ms, s * 0.92f, 0.45f * k, 0.45f * k, 0.45f * k);
-                ms.translate(0, -1.05, 0);
-                ms.scale(0.03f, -0.03f, 0.03f);
-                String name = spaced(Pillars.NAME[i]);
-                float w = -text.getWidth(name) / 2f;
-                int alpha = Math.max(4, (int) (a * 255)) << 24;
-                Matrix4f m = ms.peek().getPositionMatrix();
-                text.draw(Text.literal(name), w, 0, alpha | Pillars.rgb(i), false, m, vcp, TextRenderer.TextLayerType.NORMAL, 0, FULL);
-                ms.pop();
+                double y = b.y + h + PILLAR_TOP + 2.4 + bob;
+                DoaFont.world(ms, vcp, Pillars.KANJI[i], b.x, y, b.z, 2.0f + burst * 2.5f, 0, c[0] * k, c[1] * k, c[2] * k);
+                DoaFont.world(ms, vcp, Pillars.NAME[i], b.x, y - 1.7, b.z, 0.55f, 0.35f, c[0] * a * 1.2f, c[1] * a * 1.2f, c[2] * a * 1.2f);
             }
         }
     }
 
-    private void renderRelic(ArmoryCoreEntity e, int i, Vec3d b, double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
+    private void renderRelic(ArmoryCoreEntity e, int i, Vec3d origin, double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
         DoaModel model = DoaModels.RELIC;
         if (model == null) return;
         double u = t - Rite.relicAppear(i);
@@ -236,15 +245,15 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         float k = Rite.easeOut(u / 24.0);
         if (rel >= 0) k *= 1 - Rite.smooth(rel / 30.0);
         if (k <= 0.01f) return;
-        Vec3d in = new Vec3d(-b.x, 0, -b.z).normalize();
-        Vec3d from = b.add(in.multiply(1.1)).add(0, 4.0, 0);
-        Vec3d to = b.add(in.multiply(2.2)).add(0, 2.3 + Math.sin(time * 0.05 + i) * 0.15, 0);
+        Vec3d b = e.pillarBase(i).subtract(origin);
+        Vec3d to = e.relicPos(i).subtract(origin).add(0, Math.sin(time * 0.05 + i) * 0.15, 0);
+        Vec3d from = b.add(to.subtract(b).multiply(0.35)).add(0, 5, 0);
         Vec3d p = from.add(to.subtract(from).multiply(k));
         float[] c = Pillars.COLOR[i];
         ms.push();
         ms.translate(p.x, p.y, p.z);
         ms.multiply(new Quaternionf().rotateY((float) (Math.PI - Rite.angle(i) + time * 0.01)));
-        ms.scale(k, k, k);
+        ms.scale(k * 1.3f, k * 1.3f, k * 1.3f);
         ms.translate(0, -9 / 16f, 0);
         DoaModel.Poser poser = (bone, rot, off) -> {
             if (bone.equals("relic_core")) {
@@ -259,31 +268,20 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         float pulse = 0.8f + 0.2f * MathHelper.sin((float) time * 0.13f + i);
         boolean ready = e.isRelicReady(i);
         boolean active = e.getAbility() == i;
-        net.minecraft.client.MinecraftClient mc = net.minecraft.client.MinecraftClient.getInstance();
-        boolean hovered = !active && mc.player != null && e.getOwnerNetId() == mc.player.getId() && e.getAbility() < 0
-                && rel < 0 && e.lookedAtRelic(mc.player) == i;
+        MinecraftClient mc = MinecraftClient.getInstance();
+        boolean hovered = !active && mc.player != null && e.getOwnerNetId() == mc.player.getId() && e.getAbility() < 0 && rel < 0
+                && e.lookedAtRelic(mc.player) == i;
         if (!ready && !active) pulse *= 0.25f;
         if (active) pulse = 1.6f + 0.4f * MathHelper.sin((float) time * 0.5f);
         if (hovered) pulse *= 1.5f;
         model.render(ms, vcp.getBuffer(RenderLayer.getEyes(RELIC_GLOW)), FULL, OV, c[0] * pulse, c[1] * pulse, c[2] * pulse, 1, poser);
         ms.pop();
-        ms.push();
-        ms.translate(p.x, p.y, p.z);
-        ms.multiply(this.dispatcher.getRotation());
         float hk = k * 0.35f * pulse;
-        billboard(vcp.getBuffer(RenderLayer.getEyes(HALO)), ms, (hovered || active ? 2.2f : 1.3f) * k, c[0] * hk, c[1] * hk, c[2] * hk);
+        Bill.sprite(vcp.getBuffer(RenderLayer.getEyes(Kit.HALO)), ms, p.x, p.y, p.z, (hovered || active ? 2.4f : 1.5f) * k, 0, c[0] * hk, c[1] * hk, c[2] * hk);
         if (hovered) {
-            ms.translate(0, 1.15, 0);
-            ms.scale(0.022f, -0.022f, 0.022f);
-            Matrix4f mm = ms.peek().getPositionMatrix();
-            String title = Pillars.KANJI[i] + "  " + Abilities.TITLE[i];
-            text.draw(Text.literal(title), -text.getWidth(title) / 2f, 0, 0xFF000000 | Pillars.rgb(i), false, mm, vcp,
-                    TextRenderer.TextLayerType.NORMAL, 0x60000000, FULL);
-            String sub = ready ? Abilities.LINE[i] : "resting...";
-            text.draw(Text.literal(sub), -text.getWidth(sub) / 2f, 11, 0xFFD8D0C0, false, mm, vcp,
-                    TextRenderer.TextLayerType.NORMAL, 0x40000000, FULL);
+            DoaFont.world(ms, vcp, Pillars.KANJI[i] + "  " + Abilities.TITLE[i], p.x, p.y + 1.6, p.z, 0.36f, 0.2f, c[0] * 1.3f, c[1] * 1.3f, c[2] * 1.3f);
+            DoaFont.world(ms, vcp, ready ? "awaken" : "resting", p.x, p.y + 1.15, p.z, 0.22f, 0.25f, 0.85f, 0.82f, 0.76f);
         }
-        ms.pop();
     }
 
     // ------------------------------------------------------------------------------------------------ the orb
@@ -291,78 +289,72 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
     private void renderCore(double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
         float k = Rite.core(t, rel);
         if (k <= 0.01f) return;
-        double r = 1.25 * k * (1 + 0.04 * Math.sin(time * 0.2));
-        ms.push();
-        ms.translate(0, 3.6, 0);
-        ms.multiply(new Quaternionf().rotateY((float) (time * 0.02)));
-        sphere(vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(SKIN)), ms, r, 14, 20, time);
-        ms.pop();
-        ms.push();
-        ms.translate(0, 3.6, 0);
-        ms.multiply(this.dispatcher.getRotation());
+        double r = 1.8 * k * (1 + 0.04 * Math.sin(time * 0.2));
+        var s = DoaModels.PLANET;
+        if (s != null)
+            s.render(ms, vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(Kit.SKIN)), new org.joml.Vector3f(0, 5f, 0), (float) r,
+                    new Quaternionf().rotateY((float) (time * 0.02)), FULL, 0, false, (x, y, z, nx, ny, nz, u, v, o) -> {
+                        o[0] = 1;
+                        o[1] = 1;
+                        o[2] = 1;
+                        o[3] = 1;
+                    });
         float[] col = Pillars.colorAt(time * 0.02);
         float hk = 0.55f * k;
-        billboard(vcp.getBuffer(RenderLayer.getEyes(HALO)), ms, (float) (r * 2.4), col[0] * hk, col[1] * hk, col[2] * hk);
-        ms.pop();
+        Bill.sprite(vcp.getBuffer(RenderLayer.getEyes(Kit.HALO)), ms, 0, 5, 0, (float) (r * 2.4), 0, col[0] * hk, col[1] * hk, col[2] * hk);
     }
 
     private void renderCorruption(double t, double rel, double time, MatrixStack ms, VertexConsumerProvider vcp) {
         float c = Rite.corrupt(t, rel);
         if (c <= 0.001f) return;
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        VertexConsumer vc = vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(SKIN));
-        VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(EDGE));
         int cols = DOME_COLS;
-        double y = 0.04;
-        for (int j = 0; j < cols; j++) {
-            double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
-            double r0 = Rite.corruptEdge(a0, c, t), r1 = Rite.corruptEdge(a1, c, t);
-            float s0 = (float) Math.sin(a0), c0 = (float) -Math.cos(a0), s1 = (float) Math.sin(a1), c1 = (float) -Math.cos(a1);
-            // filled wedge (as a degenerate quad from the centre)
-            vtx(vc, m, en, 0, (float) y, 0, 0.5f, 0.5f, 1, 1, 1, 1, FULL, 0, 1, 0);
-            vtx(vc, m, en, 0, (float) y, 0, 0.5f, 0.5f, 1, 1, 1, 1, FULL, 0, 1, 0);
-            vtx(vc, m, en, (float) (s1 * r1), (float) y, (float) (c1 * r1), 0.5f + s1 * (float) r1 / 8f, 0.5f + c1 * (float) r1 / 8f, 1, 1, 1, 1, FULL, 0, 1, 0);
-            vtx(vc, m, en, (float) (s0 * r0), (float) y, (float) (c0 * r0), 0.5f + s0 * (float) r0 / 8f, 0.5f + c0 * (float) r0 / 8f, 1, 1, 1, 1, FULL, 0, 1, 0);
-            // the burning frontier
-            if (c < 0.999f || rel >= 0) {
-                float[] col = Pillars.colorAt(a0);
-                float g = 1.1f;
-                double w = 1.4;
-                double i0 = Math.max(0, r0 - w), i1 = Math.max(0, r1 - w);
-                float u0 = (float) j / cols * 6, u1 = (float) (j + 1) / cols * 6;
-                float yy = (float) (y + 0.02);
-                vtx(glow, m, en, (float) (s0 * i0), yy, (float) (c0 * i0), u0, 1, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s1 * i1), yy, (float) (c1 * i1), u1, 1, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s1 * r1), yy, (float) (c1 * r1), u1, 0, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s0 * r0), yy, (float) (c0 * r0), u0, 0, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s0 * r0), yy, (float) (c0 * r0), u0, 0, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s1 * r1), yy, (float) (c1 * r1), u1, 0, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s1 * i1), yy, (float) (c1 * i1), u1, 1, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(glow, m, en, (float) (s0 * i0), yy, (float) (c0 * i0), u0, 1, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
+        float y = 0.04f;
+        {
+            VertexConsumer vc = vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(Kit.SKIN));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
+            for (int j = 0; j < cols; j++) {
+                double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
+                double r0 = Rite.corruptEdge(a0, c, t), r1 = Rite.corruptEdge(a1, c, t);
+                float s0 = (float) Math.sin(a0), c0 = (float) -Math.cos(a0), s1 = (float) Math.sin(a1), c1 = (float) -Math.cos(a1);
+                Bill.vtx(vc, m, en, 0, y, 0, 0.5f, 0.5f, 1, 1, 1, 1);
+                Bill.vtx(vc, m, en, 0, y, 0, 0.5f, 0.5f, 1, 1, 1, 1);
+                Bill.vtx(vc, m, en, (float) (s1 * r1), y, (float) (c1 * r1), 0.5f + s1 * (float) r1 / 8f, 0.5f + c1 * (float) r1 / 8f, 1, 1, 1, 1);
+                Bill.vtx(vc, m, en, (float) (s0 * r0), y, (float) (c0 * r0), 0.5f + s0 * (float) r0 / 8f, 0.5f + c0 * (float) r0 / 8f, 1, 1, 1, 1);
             }
         }
-        // the seal ring that binds the seven: a thin ring of light through every pillar
+        if (c < 0.999f || rel >= 0) {
+            VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(Kit.EDGE));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
+            for (int j = 0; j < cols; j++) {
+                double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
+                double r0 = Rite.corruptEdge(a0, c, t), r1 = Rite.corruptEdge(a1, c, t);
+                float s0 = (float) Math.sin(a0), c0 = (float) -Math.cos(a0), s1 = (float) Math.sin(a1), c1 = (float) -Math.cos(a1);
+                float[] col = Pillars.colorAt(a0);
+                double i0 = Math.max(0, r0 - 1.8), i1 = Math.max(0, r1 - 1.8);
+                float u0 = (float) j / cols * 8, u1 = (float) (j + 1) / cols * 8, yy = y + 0.02f;
+                float g = 1.1f;
+                quad2(glow, m, en, (float) (s0 * i0), yy, (float) (c0 * i0), u0, 1, (float) (s1 * i1), yy, (float) (c1 * i1), u1, 1,
+                        (float) (s1 * r1), yy, (float) (c1 * r1), u1, 0, (float) (s0 * r0), yy, (float) (c0 * r0), u0, 0, col[0] * g, col[1] * g, col[2] * g);
+            }
+        }
         if (t >= Rite.SEAL) {
             float k = Rite.smooth((t - Rite.SEAL) / 16.0) * (rel >= 0 ? 1 - Rite.smooth(rel / 40.0) : 1);
-            VertexConsumer ring = vcp.getBuffer(RenderLayer.getEyes(EDGE));
+            VertexConsumer ring = vcp.getBuffer(RenderLayer.getEyes(Kit.EDGE));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
             double r = Rite.PILLAR_RADIUS;
-            float yy = (float) (y + 0.05);
+            float yy = y + 0.05f;
             for (int j = 0; j < cols; j++) {
                 double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
                 float[] col = Pillars.colorAt(a0);
                 float g = 0.9f * k;
                 float s0 = (float) Math.sin(a0), c0 = (float) -Math.cos(a0), s1 = (float) Math.sin(a1), c1 = (float) -Math.cos(a1);
-                double ri = r - 0.18, ro = r + 0.18;
-                float u0 = (float) j / cols * 10, u1 = (float) (j + 1) / cols * 10;
-                vtx(ring, m, en, (float) (s0 * ri), yy, (float) (c0 * ri), u0, 0.6f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s1 * ri), yy, (float) (c1 * ri), u1, 0.6f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s1 * ro), yy, (float) (c1 * ro), u1, 0.1f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s0 * ro), yy, (float) (c0 * ro), u0, 0.1f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s0 * ro), yy, (float) (c0 * ro), u0, 0.1f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s1 * ro), yy, (float) (c1 * ro), u1, 0.1f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s1 * ri), yy, (float) (c1 * ri), u1, 0.6f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
-                vtx(ring, m, en, (float) (s0 * ri), yy, (float) (c0 * ri), u0, 0.6f, col[0] * g, col[1] * g, col[2] * g, 1, FULL, 0, 1, 0);
+                double ri = r - 0.25, ro = r + 0.25;
+                float u0 = (float) j / cols * 14, u1 = (float) (j + 1) / cols * 14;
+                quad2(ring, m, en, (float) (s0 * ri), yy, (float) (c0 * ri), u0, 0.6f, (float) (s1 * ri), yy, (float) (c1 * ri), u1, 0.6f,
+                        (float) (s1 * ro), yy, (float) (c1 * ro), u1, 0.1f, (float) (s0 * ro), yy, (float) (c0 * ro), u0, 0.1f, col[0] * g, col[1] * g, col[2] * g);
             }
         }
     }
@@ -372,207 +364,109 @@ public class ArmoryCoreRenderer extends EntityRenderer<ArmoryCoreEntity> {
         if (p <= 0.0005f) return;
         double R = Rite.ORB_RADIUS;
         double et = rel >= 0 ? time : t;
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        VertexConsumer skin = vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(SKIN));
-        VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(EDGE));
-        VertexConsumer ink = vcp.getBuffer(RenderLayer.getEntityTranslucent(EDGE_INK));
         int cols = DOME_COLS;
         float flow = (float) (time * 0.0015);
-        for (int j = 0; j < cols; j++) {
-            double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
-            double e0 = Rite.domeEdge(a0, p, et), e1 = Rite.domeEdge(a1, p, et);
-            if (oculus > 0.01) {
-                double jag = 2.5 * Math.sin(a0 * 9 + time * 0.1);
-                e0 = Math.min(e0, 90 - oculus + jag);
-                e1 = Math.min(e1, 90 - oculus + 2.5 * Math.sin(a1 * 9 + time * 0.1));
-            }
-            double eTop = Math.max(e0, e1);
-            float u0 = (float) j / cols * 10, u1 = (float) (j + 1) / cols * 10;
-            // a skirt below the rim so uneven ground never leaves a gap to the world outside
-            if (Math.min(e0, e1) > 4) {
-                float x0 = (float) (Math.sin(a0) * R), z0 = (float) (-Math.cos(a0) * R), x1 = (float) (Math.sin(a1) * R), z1 = (float) (-Math.cos(a1) * R);
-                vtx(skin, m, en, x0, -7f, z0, u0, -0.3f + flow, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(skin, m, en, x1, -7f, z1, u1, -0.3f + flow, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(skin, m, en, x1, 0f, z1, u1, flow, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(skin, m, en, x0, 0f, z0, u0, flow, 1, 1, 1, 1, FULL, 0, 1, 0);
-            }
-            for (double lat = 0; lat < eTop; lat += BAND) {
-                double l1 = Math.min(lat + BAND, eTop);
-                double la0 = Math.min(lat, e0), la1 = Math.min(lat, e1);
-                double lb0 = Math.min(l1, e0), lb1 = Math.min(l1, e1);
-                if (lb0 <= la0 && lb1 <= la1) continue;
-                domeVtx(skin, m, en, R, a0, la0, u0, flow);
-                domeVtx(skin, m, en, R, a1, la1, u1, flow);
-                domeVtx(skin, m, en, R, a1, lb1, u1, flow);
-                domeVtx(skin, m, en, R, a0, lb0, u0, flow);
-            }
-            // the burning rim (absent once fully closed: the seams then glow softly instead)
-            boolean closed = e0 >= 89.9 && e1 >= 89.9;
-            float[] col = Pillars.colorAt(a0);
-            float g = closed ? 0.18f + 0.08f * MathHelper.sin((float) time * 0.07f + j * 0.3f) : 1.25f;
-            double w = closed ? 6 : 9;
-            if (!closed || p > 0.999f) {
-                double r = R + 0.03;
-                double b0 = Math.max(0, e0 - w), b1 = Math.max(0, e1 - w);
-                rimQuad(glow, m, en, r, a0, a1, e0, e1, b0, b1, u0, u1, col[0] * g, col[1] * g, col[2] * g, 1);
-                rimQuad(glow, m, en, R - 0.03, a0, a1, e0, e1, b0, b1, u0, u1, col[0] * g, col[1] * g, col[2] * g, 1);
-                if (!closed) {
-                    double c0 = Math.min(90, e0 + 2.5), c1 = Math.min(90, e1 + 2.5);
-                    rimQuad(ink, m, en, R + 0.05, a0, a1, c0, c1, Math.max(0, e0 - 1), Math.max(0, e1 - 1), u0, u1, 0.02f, 0.015f, 0.02f, 0.9f);
+        double[] edge = new double[cols + 1];
+        for (int j = 0; j <= cols; j++) {
+            double a = j * Math.PI * 2 / cols;
+            double e = Rite.domeEdge(a, p, et);
+            if (oculus > 0.01) e = Math.min(e, 90 - oculus + 2.5 * Math.sin(a * 9 + time * 0.1));
+            edge[j] = e;
+        }
+        {
+            VertexConsumer skin = vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(Kit.SKIN));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
+            for (int j = 0; j < cols; j++) {
+                double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
+                double e0 = edge[j], e1 = edge[j + 1];
+                float u0 = (float) j / cols * 14, u1 = (float) (j + 1) / cols * 14;
+                if (Math.min(e0, e1) > 4) {
+                    float[] q0 = sph(R, a0, 0), q1 = sph(R, a1, 0);
+                    Bill.vtx(skin, m, en, q0[0], -8f, q0[2], u0, -0.3f + flow, 1, 1, 1, 1);
+                    Bill.vtx(skin, m, en, q1[0], -8f, q1[2], u1, -0.3f + flow, 1, 1, 1, 1);
+                    Bill.vtx(skin, m, en, q1[0], 0f, q1[2], u1, flow, 1, 1, 1, 1);
+                    Bill.vtx(skin, m, en, q0[0], 0f, q0[2], u0, flow, 1, 1, 1, 1);
+                }
+                double eTop = Math.max(e0, e1);
+                for (double lat = 0; lat < eTop; lat += BAND) {
+                    double l1 = Math.min(lat + BAND, eTop);
+                    double la0 = Math.min(lat, e0), la1 = Math.min(lat, e1), lb0 = Math.min(l1, e0), lb1 = Math.min(l1, e1);
+                    if (lb0 <= la0 && lb1 <= la1) continue;
+                    domeVtx(skin, m, en, R, a0, la0, u0, flow);
+                    domeVtx(skin, m, en, R, a1, la1, u1, flow);
+                    domeVtx(skin, m, en, R, a1, lb1, u1, flow);
+                    domeVtx(skin, m, en, R, a0, lb0, u0, flow);
                 }
             }
         }
-        // runes inside the sphere: each pillar's name burned faintly into the dark wall behind it
+        {
+            VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(Kit.EDGE));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
+            for (int j = 0; j < cols; j++) {
+                double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
+                double e0 = edge[j], e1 = edge[j + 1];
+                boolean closed = e0 >= 89.9 && e1 >= 89.9;
+                float[] col = Pillars.colorAt(a0);
+                float g = closed ? 0.18f + 0.08f * MathHelper.sin((float) time * 0.07f + j * 0.3f) : 1.25f;
+                double w = closed ? 5 : 7;
+                float u0 = (float) j / cols * 14, u1 = (float) (j + 1) / cols * 14;
+                double b0 = Math.max(0, e0 - w), b1 = Math.max(0, e1 - w);
+                for (double rr : new double[]{R + 0.03, R - 0.03}) {
+                    float[] p00 = sph(rr, a0, b0), p10 = sph(rr, a1, b1), p11 = sph(rr, a1, e1), p01 = sph(rr, a0, e0);
+                    quad2(glow, m, en, p00[0], p00[1], p00[2], u0, 1, p10[0], p10[1], p10[2], u1, 1, p11[0], p11[1], p11[2], u1, 0, p01[0], p01[1], p01[2], u0, 0,
+                            col[0] * g, col[1] * g, col[2] * g);
+                }
+            }
+        }
+        if (p < 0.999f || oculus > 0.01) {
+            VertexConsumer ink = vcp.getBuffer(RenderLayer.getEntityTranslucent(EDGE_INK));
+            MatrixStack.Entry en = ms.peek();
+            Matrix4f m = en.getPositionMatrix();
+            for (int j = 0; j < cols; j++) {
+                double a0 = j * Math.PI * 2 / cols, a1 = (j + 1) * Math.PI * 2 / cols;
+                double e0 = edge[j], e1 = edge[j + 1];
+                if (e0 >= 89.9 && e1 >= 89.9) continue;
+                float u0 = (float) j / cols * 14, u1 = (float) (j + 1) / cols * 14;
+                float[] p00 = sph(R + 0.05, a0, Math.max(0, e0 - 1)), p10 = sph(R + 0.05, a1, Math.max(0, e1 - 1)),
+                        p11 = sph(R + 0.05, a1, Math.min(90, e1 + 2.5)), p01 = sph(R + 0.05, a0, Math.min(90, e0 + 2.5));
+                Bill.vtx(ink, m, en, p00[0], p00[1], p00[2], u0, 1, 0.02f, 0.015f, 0.02f, 0.9f);
+                Bill.vtx(ink, m, en, p10[0], p10[1], p10[2], u1, 1, 0.02f, 0.015f, 0.02f, 0.9f);
+                Bill.vtx(ink, m, en, p11[0], p11[1], p11[2], u1, 0, 0.02f, 0.015f, 0.02f, 0.9f);
+                Bill.vtx(ink, m, en, p01[0], p01[1], p01[2], u0, 0, 0.02f, 0.015f, 0.02f, 0.9f);
+            }
+        }
         if (p > 0.6f) {
             float k = Rite.smooth((p - 0.6) / 0.4) * (0.32f + 0.08f * MathHelper.sin((float) time * 0.05f));
             for (int i = 0; i < Pillars.COUNT; i++) {
                 float[] c = Pillars.COLOR[i];
-                double a = Rite.angle(i);
-                double el = Math.toRadians(24);
-                double rr = R - 0.15;
-                ms.push();
-                ms.translate(Math.sin(a) * Math.cos(el) * rr, Math.sin(el) * rr, -Math.cos(a) * Math.cos(el) * rr);
-                ms.multiply(new Quaternionf().rotateY((float) (Math.PI - a)));
-                ms.multiply(new Quaternionf().rotateX((float) -el));
-                billboard(vcp.getBuffer(RenderLayer.getEyes(LABEL[i])), ms, 2.6f, c[0] * k, c[1] * k, c[2] * k);
-                ms.pop();
+                float[] q = sph(R - 0.4, Rite.angle(i), 26);
+                DoaFont.world(ms, vcp, Pillars.KANJI[i], q[0], q[1], q[2], 4.5f, 0, c[0] * k, c[1] * k, c[2] * k);
             }
         }
     }
 
     private static void domeVtx(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, double R, double a, double latDeg, float u, float flow) {
-        double el = Math.toRadians(latDeg);
-        float x = (float) (Math.sin(a) * Math.cos(el) * R), y = (float) (Math.sin(el) * R), z = (float) (-Math.cos(a) * Math.cos(el) * R);
-        float v = (float) (latDeg / 90.0 * 4) + flow;
-        vtx(vc, m, en, x, y, z, u, v, 1, 1, 1, 1, FULL, x / (float) R, y / (float) R, z / (float) R);
+        float[] q = sph(R, a, latDeg);
+        Bill.vtx(vc, m, en, q[0], q[1], q[2], u, (float) (latDeg / 90.0 * 5) + flow, 1, 1, 1, 1);
     }
 
-    private static void rimQuad(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, double R, double a0, double a1,
-                                double top0, double top1, double bot0, double bot1, float u0, float u1, float r, float g, float b, float al) {
-        float[] p00 = sph(R, a0, bot0), p10 = sph(R, a1, bot1), p11 = sph(R, a1, top1), p01 = sph(R, a0, top0);
-        vtx(vc, m, en, p00[0], p00[1], p00[2], u0, 1, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p10[0], p10[1], p10[2], u1, 1, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p11[0], p11[1], p11[2], u1, 0, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p01[0], p01[1], p01[2], u0, 0, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p01[0], p01[1], p01[2], u0, 0, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p11[0], p11[1], p11[2], u1, 0, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p10[0], p10[1], p10[2], u1, 1, r, g, b, al, FULL, 0, 1, 0);
-        vtx(vc, m, en, p00[0], p00[1], p00[2], u0, 1, r, g, b, al, FULL, 0, 1, 0);
+    private static void quad2(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, float x0, float y0, float z0, float u0, float v0, float x1, float y1,
+                              float z1, float u1, float v1, float x2, float y2, float z2, float u2, float v2, float x3, float y3, float z3, float u3, float v3,
+                              float r, float g, float b) {
+        Bill.vtx(vc, m, en, x0, y0, z0, u0, v0, r, g, b, 1);
+        Bill.vtx(vc, m, en, x1, y1, z1, u1, v1, r, g, b, 1);
+        Bill.vtx(vc, m, en, x2, y2, z2, u2, v2, r, g, b, 1);
+        Bill.vtx(vc, m, en, x3, y3, z3, u3, v3, r, g, b, 1);
+        Bill.vtx(vc, m, en, x3, y3, z3, u3, v3, r, g, b, 1);
+        Bill.vtx(vc, m, en, x2, y2, z2, u2, v2, r, g, b, 1);
+        Bill.vtx(vc, m, en, x1, y1, z1, u1, v1, r, g, b, 1);
+        Bill.vtx(vc, m, en, x0, y0, z0, u0, v0, r, g, b, 1);
     }
 
     static float[] sph(double R, double a, double latDeg) {
         double el = Math.toRadians(latDeg);
         return new float[]{(float) (Math.sin(a) * Math.cos(el) * R), (float) (Math.sin(el) * R), (float) (-Math.cos(a) * Math.cos(el) * R)};
-    }
-
-    static void sphere(VertexConsumer vc, MatrixStack ms, double r, int lats, int lons, double time) {
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        for (int i = 0; i < lats; i++) {
-            double t0 = -90 + 180.0 * i / lats, t1 = -90 + 180.0 * (i + 1) / lats;
-            for (int j = 0; j < lons; j++) {
-                double a0 = Math.PI * 2 * j / lons, a1 = Math.PI * 2 * (j + 1) / lons;
-                float[] p00 = sph(r, a0, t0), p10 = sph(r, a1, t0), p11 = sph(r, a1, t1), p01 = sph(r, a0, t1);
-                float u0 = (float) j / lons * 2, u1 = (float) (j + 1) / lons * 2, v0 = (float) i / lats, v1 = (float) (i + 1) / lats;
-                vtx(vc, m, en, p00[0], p00[1], p00[2], u0, v0, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(vc, m, en, p10[0], p10[1], p10[2], u1, v0, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(vc, m, en, p11[0], p11[1], p11[2], u1, v1, 1, 1, 1, 1, FULL, 0, 1, 0);
-                vtx(vc, m, en, p01[0], p01[1], p01[2], u0, v1, 1, 1, 1, 1, FULL, 0, 1, 0);
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------------------------------------ primitives
-
-    static void vtx(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, float x, float y, float z, float u, float v,
-                            float r, float g, float b, float a, int light, float nx, float ny, float nz) {
-        vc.vertex(m, x, y, z).color(Math.min(1, r), Math.min(1, g), Math.min(1, b), Math.min(1, a)).texture(u, v).overlay(OV).light(light).normal(en, nx, ny, nz);
-    }
-
-    /** Flat quad on the ground, both sides, additive (colour = brightness). */
-    static void flat(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb) {
-        flatColor(vc, ms, r, cr, cg, cb, 1);
-    }
-
-    static void flatColor(VertexConsumer vc, MatrixStack ms, double r, float cr, float cg, float cb, float a) {
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        float s = (float) r;
-        vtx(vc, m, en, -s, 0, s, 0, 1, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, s, 0, s, 1, 1, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, s, 0, -s, 1, 0, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, -s, 0, -s, 0, 0, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, -s, 0, -s, 0, 0, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, s, 0, -s, 1, 0, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, s, 0, s, 1, 1, cr, cg, cb, a, FULL, 0, 1, 0);
-        vtx(vc, m, en, -s, 0, s, 0, 1, cr, cg, cb, a, FULL, 0, 1, 0);
-    }
-
-    /** Quad in the local XY plane (after a camera-facing rotation), oriented like vanilla particles. */
-    static void billboard(VertexConsumer vc, MatrixStack ms, float s, float r, float g, float b) {
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        vtx(vc, m, en, -s, -s, 0, 1, 1, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, -s, s, 0, 1, 0, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, s, s, 0, 0, 0, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, s, -s, 0, 0, 1, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, s, -s, 0, 0, 1, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, s, s, 0, 0, 0, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, -s, s, 0, 1, 0, r, g, b, 1, FULL, 0, 0, 1);
-        vtx(vc, m, en, -s, -s, 0, 1, 1, r, g, b, 1, FULL, 0, 0, 1);
-    }
-
-    /** A vertical strip at (base.x, base.z) facing the camera around the Y axis, from y0 to y1 above base.y. */
-    static void column(VertexConsumer vc, MatrixStack ms, Vec3d base, Vec3d cam, double halfWidth, double y0, double y1,
-                               float r, float g, float b, float vBottom, float vTop) {
-        double dx = cam.x - base.x, dz = cam.z - base.z;
-        double len = Math.sqrt(dx * dx + dz * dz);
-        if (len < 1e-4) {
-            dx = 1;
-            len = 1;
-        }
-        float rx = (float) (dz / len * halfWidth), rz = (float) (-dx / len * halfWidth);
-        float bx = (float) base.x, bz = (float) base.z, ya = (float) (base.y + y0), yb = (float) (base.y + y1);
-        MatrixStack.Entry en = ms.peek();
-        Matrix4f m = en.getPositionMatrix();
-        vtx(vc, m, en, bx - rx, ya, bz - rz, 0, vBottom, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + rx, ya, bz + rz, 1, vBottom, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + rx, yb, bz + rz, 1, vTop, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx - rx, yb, bz - rz, 0, vTop, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx - rx, yb, bz - rz, 0, vTop, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + rx, yb, bz + rz, 1, vTop, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + rx, ya, bz + rz, 1, vBottom, r, g, b, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx - rx, ya, bz - rz, 0, vBottom, r, g, b, 1, FULL, 0, 1, 0);
-    }
-
-    /** A camera-facing ribbon from a to b (both sides), v running 0 at a to 1 at b. */
-    static void strip(VertexConsumer vc, Matrix4f m, MatrixStack.Entry en, Vec3d a, Vec3d b, Vec3d cam, double halfWidth,
-                      float r, float g, float bl) {
-        Vec3d d = b.subtract(a);
-        if (d.lengthSquared() < 1e-8) return;
-        Vec3d mid = a.add(b).multiply(0.5);
-        Vec3d side = d.crossProduct(cam.subtract(mid));
-        if (side.lengthSquared() < 1e-8) side = d.crossProduct(new Vec3d(0, 1, 0.01));
-        side = side.normalize().multiply(halfWidth);
-        float ax = (float) a.x, ay = (float) a.y, az = (float) a.z, bx = (float) b.x, by = (float) b.y, bz = (float) b.z;
-        float sx = (float) side.x, sy = (float) side.y, sz = (float) side.z;
-        vtx(vc, m, en, ax - sx, ay - sy, az - sz, 0, 0, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, ax + sx, ay + sy, az + sz, 1, 0, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + sx, by + sy, bz + sz, 1, 1, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx - sx, by - sy, bz - sz, 0, 1, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx - sx, by - sy, bz - sz, 0, 1, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, bx + sx, by + sy, bz + sz, 1, 1, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, ax + sx, ay + sy, az + sz, 1, 0, r, g, bl, 1, FULL, 0, 1, 0);
-        vtx(vc, m, en, ax - sx, ay - sy, az - sz, 0, 0, r, g, bl, 1, FULL, 0, 1, 0);
-    }
-
-    static String spaced(String s) {
-        StringBuilder b = new StringBuilder();
-        for (int k = 0; k < s.length(); k++) {
-            if (k > 0) b.append(' ');
-            b.append(s.charAt(k));
-        }
-        return b.toString();
     }
 }

@@ -5,7 +5,6 @@ import com.creedpdf.doa.Pillars;
 import com.creedpdf.doa.Rite;
 import com.creedpdf.doa.registry.DoaSounds;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
@@ -14,6 +13,7 @@ import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.registry.tag.EntityTypeTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
@@ -22,7 +22,6 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.Heightmap;
-import net.minecraft.world.World;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,13 +30,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Server side of the seven relics: who they strike, when, and how hard. */
+/**
+ * Server side of the seven moves: who they strike and when. Everything visible is drawn by the client from the
+ * synced move clock; nothing here spawns vanilla particles, explosions or glow outlines.
+ */
 public class AbilityEngine {
     private final ArmoryCoreEntity core;
     final int[] readyAt = new int[Pillars.COUNT];
     private final List<Integer> targets = new ArrayList<>();
     private final List<Vec3d> points = new ArrayList<>();
-    private final Map<UUID, int[]> frozen = new HashMap<>();   // uuid -> {until, hadNoGravity}
+    private final Map<UUID, int[]> frozen = new HashMap<>();
 
     AbilityEngine(ArmoryCoreEntity core) {
         this.core = core;
@@ -57,8 +59,14 @@ public class AbilityEngine {
         return new Vec3d(x, Math.abs(top - fallbackY) < 40 ? top : fallbackY, z);
     }
 
+    private Vec3d ringPoint(ServerWorld sw, double r0, double r1) {
+        Vec3d c = core.getPos();
+        double a = sw.random.nextDouble() * Math.PI * 2, r = r0 + sw.random.nextDouble() * (r1 - r0);
+        return surface(sw, c.x + Math.sin(a) * r, c.z - Math.cos(a) * r, c.y);
+    }
+
     private Vec3d ahead(ServerWorld sw, ServerPlayerEntity owner, double dist) {
-        Vec3d look = owner.getRotationVec(1f).multiply(1, 0, 1);
+        Vec3d look = owner == null ? new Vec3d(0, 0, -1) : owner.getRotationVec(1f).multiply(1, 0, 1);
         if (look.lengthSquared() < 1e-4) look = new Vec3d(0, 0, -1);
         look = look.normalize();
         Vec3d c = core.getPos();
@@ -92,10 +100,33 @@ public class AbilityEngine {
         e.damage(sw.getDamageSources().magic(), amount);
     }
 
+    private void knock(LivingEntity e, Vec3d from, double h, double v) {
+        Vec3d push = e.getPos().subtract(from).multiply(1, 0, 1);
+        push = push.lengthSquared() < 1e-4 ? new Vec3d(1, 0, 0) : push.normalize();
+        e.addVelocity(push.x * h, v, push.z * h);
+        e.velocityModified = true;
+    }
+
     private boolean ally(Entity e, ServerPlayerEntity owner) {
         if (e == owner || e instanceof ArmoryCoreEntity) return true;
         if (e instanceof PlayerEntity p) return core.isOwnedBy(p);
         return e instanceof TameableEntity t && owner != null && owner.getUuid().equals(t.getOwnerUuid());
+    }
+
+    private LivingEntity living(ServerWorld sw, int id) {
+        Entity e = sw.getEntityById(id);
+        return e instanceof LivingEntity l && l.isAlive() ? l : null;
+    }
+
+    private void area(ServerWorld sw, ServerPlayerEntity owner, Vec3d p, double radius, float dmg, double knock, int fire) {
+        for (LivingEntity e : sw.getEntitiesByClass(LivingEntity.class, new Box(p, p).expand(radius), Entity::isAlive)) {
+            if (ally(e, owner)) continue;
+            double d = e.getPos().distanceTo(p);
+            if (d > radius) continue;
+            damage(sw, e, (float) (dmg * (1 - 0.5 * d / radius)));
+            if (knock > 0) knock(e, p, knock, 0.5 + knock * 0.3);
+            if (fire > 0) e.setOnFireFor(fire);
+        }
     }
 
     // ------------------------------------------------------------------------------------------------ start
@@ -109,40 +140,38 @@ public class AbilityEngine {
         Vec3d c = core.getPos();
         switch (i) {
             case Abilities.DEATH, Abilities.SOUL -> {
-                for (LivingEntity e : hostiles(sw, c, Abilities.RANGE, 48)) targets.add(e.getId());
+                for (LivingEntity e : hostiles(sw, c, Abilities.RANGE, 32)) targets.add(e.getId());
+            }
+            case Abilities.REDEMPTION -> {
+                for (LivingEntity e : sw.getEntitiesByClass(LivingEntity.class, new Box(c, c).expand(Abilities.RANGE),
+                        e -> e.isAlive() && e.getType().isIn(EntityTypeTags.UNDEAD))) targets.add(e.getId());
             }
             case Abilities.WRATH -> {
-                List<LivingEntity> hs = hostiles(sw, c, Abilities.RANGE, Abilities.WRATH_SPEARS);
+                List<LivingEntity> hs = hostiles(sw, c, Abilities.RANGE, Abilities.BRK_METEORS);
                 for (LivingEntity e : hs) points.add(e.getPos());
-                var rnd = sw.random;
-                while (points.size() < Abilities.WRATH_SPEARS) {
-                    double a = rnd.nextDouble() * Math.PI * 2, r = Rite.ORB_RADIUS + 5 + rnd.nextDouble() * 34;
-                    points.add(surface(sw, c.x + Math.sin(a) * r, c.z - Math.cos(a) * r, c.y));
-                }
+                while (points.size() < Abilities.BRK_METEORS) points.add(ringPoint(sw, Rite.ORB_RADIUS + 6, Rite.ORB_RADIUS + 44));
             }
             case Abilities.FATE -> {
                 LivingEntity best = null;
                 for (LivingEntity e : hostiles(sw, c, Abilities.RANGE, 64))
                     if (best == null || e.getMaxHealth() > best.getMaxHealth()) best = e;
-                Vec3d p = best != null ? best.getPos() : ahead(sw, owner, Rite.ORB_RADIUS + 12);
-                if (p.subtract(c).horizontalLength() < Rite.ORB_RADIUS + 6) p = ahead(sw, owner, Rite.ORB_RADIUS + 12);
+                Vec3d p = best != null ? best.getPos() : ahead(sw, owner, Rite.ORB_RADIUS + 16);
+                if (p.subtract(c).horizontalLength() < Rite.ORB_RADIUS + 6) p = ahead(sw, owner, Rite.ORB_RADIUS + 16);
                 points.add(p);
             }
             case Abilities.VOID -> {
                 List<LivingEntity> hs = hostiles(sw, c, Abilities.RANGE, 64);
-                Vec3d p;
-                if (!hs.isEmpty()) {
-                    Vec3d sum = Vec3d.ZERO;
-                    for (LivingEntity e : hs) sum = sum.add(e.getPos());
-                    p = sum.multiply(1.0 / hs.size());
-                    Vec3d d = p.subtract(c).multiply(1, 0, 1);
+                for (LivingEntity e : hs) targets.add(e.getId());
+                // tear the sky above where the enemies gather, or around the sphere if there are none
+                for (int k = 0; k < Abilities.RFT_RIFTS; k++) {
+                    Vec3d at;
+                    if (k < hs.size()) at = hs.get(k * Math.max(1, hs.size() / Abilities.RFT_RIFTS) % hs.size()).getPos();
+                    else at = ringPoint(sw, Rite.ORB_RADIUS + 10, Rite.ORB_RADIUS + 34);
+                    Vec3d d = at.subtract(c).multiply(1, 0, 1);
                     if (d.length() < Rite.ORB_RADIUS + 8)
-                        p = d.lengthSquared() < 1e-3 ? ahead(sw, owner, Rite.ORB_RADIUS + 12) : c.add(d.normalize().multiply(Rite.ORB_RADIUS + 12));
-                    p = surface(sw, p.x, p.z, c.y);
-                } else {
-                    p = ahead(sw, owner, Rite.ORB_RADIUS + 12);
+                        at = c.add((d.lengthSquared() < 1e-3 ? new Vec3d(1, 0, 0) : d.normalize()).multiply(Rite.ORB_RADIUS + 12));
+                    points.add(new Vec3d(at.x, c.y + 42 + k * 5, at.z));
                 }
-                points.add(p.add(0, 6, 0));
             }
             default -> {
             }
@@ -167,46 +196,44 @@ public class AbilityEngine {
             return;
         }
         core.setAbilityState(i, a, null);
-        Vec3d c = core.getPos();
+        // the caller is shielded while their cutscene plays
+        if (owner != null && a % 40 == 1) owner.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 60, 4, false, false));
         switch (i) {
-            case Abilities.DEATH -> death(sw, a);
-            case Abilities.REDEMPTION -> redemption(sw, owner, a);
-            case Abilities.WRATH -> wrath(sw, owner, a);
-            case Abilities.SOUL -> soul(sw, owner, a);
-            case Abilities.FATE -> fate(sw, owner, a);
-            case Abilities.SILENCE -> silence(sw, owner, a, t);
-            case Abilities.VOID -> voidMaw(sw, owner, a);
+            case Abilities.DEATH -> eclipse(sw, owner, a);
+            case Abilities.REDEMPTION -> dawn(sw, owner, a);
+            case Abilities.WRATH -> breaker(sw, owner, a);
+            case Abilities.SOUL -> heart(sw, owner, a);
+            case Abilities.FATE -> beyond(sw, owner, a);
+            case Abilities.SILENCE -> moonrise(sw, owner, a, t);
+            case Abilities.VOID -> rift(sw, owner, a);
             default -> {
             }
         }
     }
 
-    private LivingEntity living(ServerWorld sw, int id) {
-        Entity e = sw.getEntityById(id);
-        return e instanceof LivingEntity l && l.isAlive() ? l : null;
-    }
-
-    private void death(ServerWorld sw, int a) {
-        if (a == Abilities.DEATH_MARK) {
-            play(DoaSounds.VERDICT, core.getPos().add(0, 8, 0), 8f, 1f);
-            for (int id : targets) {
-                LivingEntity e = living(sw, id);
-                if (e != null) e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 60, 0, false, false));
+    private void eclipse(ServerWorld sw, ServerPlayerEntity owner, int a) {
+        Vec3d c = core.getPos();
+        if (a == Abilities.ECL_DARK) play(DoaSounds.ORB_RISE, c.add(0, 10, 0), 8f, 0.7f);
+        if (a == Abilities.ECL_TOTAL - 40) play(DoaSounds.VERDICT, c.add(0, 10, 0), 10f, 0.8f);
+        for (int k = 0; k < targets.size(); k++) {
+            int hit = Abilities.eclipseStrike(k);
+            LivingEntity e = living(sw, targets.get(k));
+            if (e == null) continue;
+            if (a == hit - 10) play(DoaSounds.SPEAR, e.getPos(), 3f, 0.7f);
+            if (a == hit) {
+                damage(sw, e, Math.max(e.getMaxHealth() * 4f, 200f));
+                area(sw, owner, e.getPos(), 3, 12, 0.8, 0);
             }
         }
-        if (a == Abilities.DEATH_STRIKE) {
-            for (int id : targets) {
-                LivingEntity e = living(sw, id);
-                if (e != null) damage(sw, e, Math.max(e.getMaxHealth() * 4f, 200f));
-            }
-        }
+        if (a == Abilities.ECL_LIGHT) play(DoaSounds.SEAL, c.add(0, 6, 0), 6f, 0.8f);
     }
 
-    private void redemption(ServerWorld sw, ServerPlayerEntity owner, int a) {
-        if (a == 15) play(DoaSounds.ABSOLUTION, core.getPos().add(0, 2, 0), 5f, 1f);
-        if (a != Abilities.REDEEM_HEAL) return;
-        List<PlayerEntity> blessed = new ArrayList<>(sw.getEntitiesByClass(PlayerEntity.class,
-                new Box(core.getPos(), core.getPos()).expand(Rite.ORB_RADIUS), p -> p.isAlive()));
+    private void dawn(ServerWorld sw, ServerPlayerEntity owner, int a) {
+        Vec3d c = core.getPos();
+        if (a == Abilities.DAWN_RISE) play(DoaSounds.FATE_ASCEND, c.add(0, 4, 0), 4f, 1.1f);
+        if (a == Abilities.DAWN_HEAL - 30) play(DoaSounds.ABSOLUTION, c.add(0, 4, 0), 6f, 1f);
+        if (a != Abilities.DAWN_HEAL) return;
+        List<PlayerEntity> blessed = new ArrayList<>(sw.getEntitiesByClass(PlayerEntity.class, new Box(c, c).expand(Rite.ORB_RADIUS), PlayerEntity::isAlive));
         if (owner != null && !blessed.contains(owner)) blessed.add(owner);
         for (PlayerEntity p : blessed) {
             p.setHealth(p.getMaxHealth());
@@ -215,85 +242,91 @@ public class AbilityEngine {
             p.getHungerManager().setSaturationLevel(20f);
             for (StatusEffectInstance inst : new ArrayList<>(p.getStatusEffects()))
                 if (!inst.getEffectType().value().isBeneficial()) p.removeStatusEffect(inst.getEffectType());
-            p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 600, 1));
-            p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 2400, 3));
-            p.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 2400, 1));
-            p.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 2400, 0));
+            p.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 900, 1));
+            p.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 3600, 4));
+            p.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 3600, 1));
+            p.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 3600, 0));
         }
-    }
-
-    private void wrath(ServerWorld sw, ServerPlayerEntity owner, int a) {
-        if (a == 1) play(DoaSounds.WAR_DRUMS, core.getPos().add(0, 10, 0), 8f, 1f);
-        for (int k = 0; k < points.size(); k++) {
-            int hit = Abilities.wrathImpact(k);
-            Vec3d p = points.get(k);
-            if (a == hit - 12) play(DoaSounds.SPEAR, p, 4f, 0.9f + (k % 5) * 0.05f);
-            if (a == hit) {
-                sw.createExplosion(null, p.x, p.y + 0.5, p.z, 2.6f, false, World.ExplosionSourceType.NONE);
-                for (LivingEntity e : sw.getEntitiesByClass(LivingEntity.class, new Box(p, p).expand(3.8), Entity::isAlive)) {
-                    if (ally(e, owner)) continue;
-                    damage(sw, e, 14f);
-                    e.setOnFireFor(6f);
-                }
+        // the dawn burns what should not walk
+        for (int id : targets) {
+            LivingEntity e = living(sw, id);
+            if (e != null) {
+                damage(sw, e, 60f);
+                e.setOnFireFor(8f);
             }
         }
     }
 
-    private void soul(ServerWorld sw, ServerPlayerEntity owner, int a) {
-        if (a == 2) play(DoaSounds.SOUL, core.getPos().add(0, 6, 0), 6f, 1f);
-        if (a >= Abilities.SOUL_DRAIN_START && a <= Abilities.SOUL_DRAIN_END && (a - Abilities.SOUL_DRAIN_START) % 8 == 0) {
+    private void breaker(ServerWorld sw, ServerPlayerEntity owner, int a) {
+        Vec3d c = core.getPos();
+        if (a == Abilities.BRK_UP - 60) play(DoaSounds.FATE_ASCEND, c.add(0, 4, 0), 4f, 0.8f);
+        if (a == Abilities.BRK_METEOR - 20) play(DoaSounds.WAR_DRUMS, c.add(0, 12, 0), 10f, 1f);
+        for (int k = 0; k < points.size(); k++) {
+            int hit = Abilities.meteorHit(k);
+            Vec3d p = points.get(k);
+            if (a == hit - 12) play(DoaSounds.SPEAR, p, 5f, 0.8f + (k % 5) * 0.05f);
+            if (a == hit) {
+                play(DoaSounds.IMPACT, p, 5f, 0.8f + (k % 4) * 0.06f);
+                area(sw, owner, p, 4.5, 20, 1.2, 6);
+            }
+        }
+    }
+
+    private void heart(ServerWorld sw, ServerPlayerEntity owner, int a) {
+        Vec3d c = core.getPos();
+        if (a == Abilities.HRT_DIVE) play(DoaSounds.ORB_CLOSE, c, 6f, 0.7f);
+        if (a == Abilities.HRT_DRAIN - 20) play(DoaSounds.SOUL, c.add(0, 6, 0), 8f, 0.9f);
+        if (a >= Abilities.HRT_DRAIN && a <= Abilities.HRT_DRAIN_END && (a - Abilities.HRT_DRAIN) % 14 == 0) {
             int drained = 0;
             for (int id : targets) {
                 LivingEntity e = living(sw, id);
                 if (e == null) continue;
-                damage(sw, e, 3.5f);
-                e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 20, 0, false, false));
-                e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 20, 3, false, false));
+                damage(sw, e, 4f);
+                e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 30, 3, false, false));
                 drained++;
             }
-            if (owner != null && drained > 0) owner.heal(Math.min(4f, drained * 0.5f));
+            if (owner != null && drained > 0) owner.heal(Math.min(4f, drained * 0.6f));
         }
-        if (a == Abilities.SOUL_CLIMAX && owner != null) {
-            owner.heal(8f);
-            owner.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 1800, 1));
-            owner.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 1800, 1));
+        if (a == Abilities.HRT_CLIMAX) {
+            play(DoaSounds.FATE_STRIKE, c.add(0, 4, 0), 8f, 1.2f);
+            for (int id : targets) {
+                LivingEntity e = living(sw, id);
+                if (e != null) damage(sw, e, 24f);
+            }
+            if (owner != null) {
+                owner.heal(10f);
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 2400, 1));
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 2400, 1));
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 600, 1));
+            }
         }
     }
 
-    private void fate(ServerWorld sw, ServerPlayerEntity owner, int a) {
+    private void beyond(ServerWorld sw, ServerPlayerEntity owner, int a) {
         Vec3d p = points.isEmpty() ? core.getPos() : points.get(0);
-        if (a == Abilities.FATE_STRIKE - 16) play(DoaSounds.FATE_STRIKE, p, 10f, 1f);
-        if (a == Abilities.FATE_STRIKE) {
-            sw.createExplosion(null, p.x, p.y + 0.5, p.z, 4.5f, false, World.ExplosionSourceType.NONE);
-            for (LivingEntity e : sw.getEntitiesByClass(LivingEntity.class, new Box(p, p).expand(11), Entity::isAlive)) {
-                if (ally(e, owner)) continue;
-                double d = e.getPos().distanceTo(p);
-                if (d > 11) continue;
-                damage(sw, e, (float) (50 * (1 - d / 14)));
-                Vec3d push = e.getPos().subtract(p).multiply(1, 0, 1);
-                push = push.lengthSquared() < 1e-4 ? new Vec3d(1, 0, 0) : push.normalize();
-                e.addVelocity(push.x * 2.2, 1.0, push.z * 2.2);
-                e.velocityModified = true;
-            }
+        if (a == Abilities.BYD_STRIKE - 16) play(DoaSounds.FATE_STRIKE, p, 12f, 0.9f);
+        if (a == Abilities.BYD_STRIKE) {
+            area(sw, owner, p, 14, 70, 2.4, 0);
             sw.setWeather(12000, 0, false, false);
             if (owner != null) {
                 owner.addStatusEffect(new StatusEffectInstance(StatusEffects.LUCK, 6000, 2));
-                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 2400, 1));
-                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE, 2400, 1));
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 3600, 1));
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE, 3600, 1));
                 owner.addStatusEffect(new StatusEffectInstance(StatusEffects.HERO_OF_THE_VILLAGE, 6000, 0));
             }
         }
     }
 
-    private void silence(ServerWorld sw, ServerPlayerEntity owner, int a, int t) {
-        if (a == Abilities.SILENCE_TOLL) play(DoaSounds.SILENCE, core.getPos().add(0, 8, 0), 10f, 1f);
-        if (a != Abilities.SILENCE_TOLL + 4) return;
+    private void moonrise(ServerWorld sw, ServerPlayerEntity owner, int a, int t) {
         Vec3d c = core.getPos();
+        if (a == Abilities.MOON_NIGHT) play(DoaSounds.ORB_RISE, c.add(0, 8, 0), 6f, 0.6f);
+        if (a == Abilities.MOON_TOLL) play(DoaSounds.SILENCE, c.add(0, 8, 0), 12f, 1f);
+        if (a != Abilities.MOON_TOLL + 4) return;
         targets.clear();
         for (MobEntity m : sw.getEntitiesByClass(MobEntity.class, new Box(c, c).expand(Abilities.RANGE),
                 e -> e.isAlive() && e.squaredDistanceTo(c) <= Abilities.RANGE * Abilities.RANGE)) {
             if (ally(m, owner)) continue;
-            frozen.put(m.getUuid(), new int[]{t + Abilities.SILENCE_FREEZE, m.hasNoGravity() ? 1 : 0});
+            frozen.put(m.getUuid(), new int[]{t + Abilities.MOON_FREEZE, m.hasNoGravity() ? 1 : 0});
             m.setAiDisabled(true);
             m.setNoGravity(true);
             m.setVelocity(Vec3d.ZERO);
@@ -335,35 +368,31 @@ public class AbilityEngine {
         frozen.clear();
     }
 
-    private void voidMaw(ServerWorld sw, ServerPlayerEntity owner, int a) {
-        Vec3d p = points.isEmpty() ? core.getPos() : points.get(0);
-        if (a == Abilities.VOID_OPEN) play(DoaSounds.VOID_OPEN, p, 8f, 1f);
-        if (a == Abilities.VOID_COLLAPSE - 28) play(DoaSounds.VOID_COLLAPSE, p, 10f, 1f);
-        if (a > Abilities.VOID_OPEN && a < Abilities.VOID_COLLAPSE) {
-            float grow = Rite.clamp01((a - Abilities.VOID_OPEN) / 30.0);
-            for (Entity e : sw.getOtherEntities(core, new Box(p, p).expand(22), en -> en.isAlive() && !en.isSpectator())) {
-                if (ally(e, owner)) continue;
-                if (!(e instanceof LivingEntity) && !(e instanceof ItemEntity)) continue;
-                Vec3d d = p.subtract(e.getPos().add(0, e.getHeight() / 2, 0));
-                double dist = d.length();
-                if (dist > 22 || dist < 1e-3) continue;
-                double pull = grow * (0.05 + 0.16 * (1 - dist / 22));
-                e.addVelocity(d.x / dist * pull, d.y / dist * pull + 0.02, d.z / dist * pull);
+    private void rift(ServerWorld sw, ServerPlayerEntity owner, int a) {
+        Vec3d c = core.getPos();
+        if (a == Abilities.RFT_OPEN) play(DoaSounds.VOID_OPEN, c.add(0, 30, 0), 12f, 0.9f);
+        if (a == Abilities.RFT_SEAL - 28) play(DoaSounds.VOID_COLLAPSE, c.add(0, 30, 0), 12f, 1f);
+        if (a >= Abilities.RFT_LIFT && a < Abilities.RFT_TAKE && !points.isEmpty()) {
+            for (int id : targets) {
+                LivingEntity e = living(sw, id);
+                if (e == null) continue;
+                Vec3d best = points.get(0);
+                for (Vec3d p : points) if (p.squaredDistanceTo(e.getPos()) < best.squaredDistanceTo(e.getPos())) best = p;
+                Vec3d d = best.subtract(e.getPos());
+                double len = Math.max(1, d.length());
+                float k = Rite.clamp01((a - Abilities.RFT_LIFT) / 60.0);
+                Vec3d tang = new Vec3d(-d.z, 0, d.x).normalize().multiply(0.08);
+                e.setVelocity(d.x / len * 0.22 * k + tang.x, 0.12 + 0.18 * k, d.z / len * 0.22 * k + tang.z);
                 e.velocityModified = true;
-                if (e instanceof LivingEntity l && dist < 5 && a % 10 == 0) damage(sw, l, 3f);
+                e.fallDistance = 0;
             }
         }
-        if (a == Abilities.VOID_COLLAPSE) {
-            sw.createExplosion(null, p.x, p.y, p.z, 3.5f, false, World.ExplosionSourceType.NONE);
-            for (LivingEntity e : sw.getEntitiesByClass(LivingEntity.class, new Box(p, p).expand(11), Entity::isAlive)) {
-                if (ally(e, owner)) continue;
-                double d = e.getPos().distanceTo(p);
-                if (d > 11) continue;
-                damage(sw, e, (float) (38 * (1 - d / 15)));
-                Vec3d push = e.getPos().subtract(p);
-                push = push.lengthSquared() < 1e-4 ? new Vec3d(0, 1, 0) : push.normalize();
-                e.addVelocity(push.x * 1.8, 0.8, push.z * 1.8);
-                e.velocityModified = true;
+        if (a == Abilities.RFT_TAKE) {
+            for (int id : targets) {
+                LivingEntity e = living(sw, id);
+                if (e == null) continue;
+                if (e.getY() > c.y + 14) damage(sw, e, Math.max(e.getMaxHealth() * 4f, 200f));
+                else damage(sw, e, 30f);
             }
         }
     }

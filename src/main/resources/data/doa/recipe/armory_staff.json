@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["GEG", " B ", " B "],
+  "key": {
+    "G": {"item": "minecraft:gold_ingot"},
+    "E": {"item": "minecraft:ender_eye"},
+    "B": {"item": "minecraft:blaze_rod"}
+  },
+  "result": {"id": "doa:armory_staff", "count": 1}
+}

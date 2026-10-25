@@ -20,5 +20,8 @@ public class DoaClient implements ClientModInitializer {
         Fx.register();
         ArmoryCoreEntity.clientTick = Fx::tick;
         ClientTickEvents.END_CLIENT_TICK.register(Cutscene::clientTick);
+        net.fabricmc.fabric.api.client.rendering.v1.BuiltinItemRendererRegistry.INSTANCE.register(com.creedpdf.doa.registry.DoaItems.ARMORY_STAFF,
+                new com.creedpdf.doa.client.render.StaffRenderer());
+        com.creedpdf.doa.client.text.Toasts.init();
     }
 }

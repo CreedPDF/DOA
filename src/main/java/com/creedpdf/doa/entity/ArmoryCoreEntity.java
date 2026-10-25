@@ -154,7 +154,7 @@ public class ArmoryCoreEntity extends Entity {
     public Vec3d relicPos(int i) {
         Vec3d b = pillarBase(i);
         Vec3d in = new Vec3d(getX() - b.x, 0, getZ() - b.z).normalize();
-        return b.add(in.multiply(2.2)).add(0, 2.3, 0);
+        return b.add(in.multiply(3.4)).add(0, 2.8, 0);
     }
 
     // ------------------------------------------------------------------------------------------------ abilities
