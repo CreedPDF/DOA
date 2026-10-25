@@ -596,7 +596,7 @@ def build_space(assets, out, render):
     planet.scale = (6, 6, 6)
     planet.location = (0, 0, -7.2)
     planet.rotation_euler = (math.radians(62), 0, math.radians(30))
-    planet.data.materials.append(image_mat("earth", os.path.join(tex, "earth.png"), os.path.join(tex, "earth_night.png"), emit_strength=0.6))
+    planet.data.materials.append(image_mat("earth", os.path.join(tex, "earth.png"), os.path.join(tex, "earth.png"), emit_strength=1.0))
     clouds = make_planet("clouds", 96, 48)
     clouds.scale = (6.06, 6.06, 6.06)
     clouds.location = planet.location
@@ -648,18 +648,6 @@ def main():
     os.makedirs(out, exist_ok=True)
     reset()
 
-    # ---- pillar: one geometry, seven painted variants
-    parts = pillar_parts()
-    size = pack(parts, TPP)
-    export_model(parts, size, os.path.join(assets, "models/entity/pillar.json"), "pillar")
-    imgs = []
-    for i, (pid, col) in enumerate(PILLARS):
-        rgb, gl = paint(parts, size, TPP, glyph=os.path.join(glyphs, pid + ".png"), glow=col, seed=7 + i)
-        ai = save_rgba(rgb, os.path.join(assets, f"textures/entity/pillar/{pid}.png"))
-        gi = save_rgba(gl, os.path.join(assets, f"textures/entity/pillar/{pid}_glow.png"))
-        imgs.append((pid, ai, gi))
-        print(f"[pillar] {pid}: atlas {size}px")
-
     # ---- relic
     rparts = relic_parts()
     rsize = pack(rparts, 8)
@@ -673,31 +661,6 @@ def main():
         build_space(assets, out, False)
         return
     scene, cam = setup_render()
-    # the ring of seven, as called down
-    for i, (pid, ai, gi) in enumerate(imgs):
-        ang = i / 7 * math.tau
-        off = Vector((math.sin(ang) * 6.0, math.cos(ang) * 6.0, 0))
-        build_mesh(f"pillar_{pid}", parts, size, ai, gi, off - Vector((0, 0, 0)))
-    shoot(scene, cam, os.path.join(out, "ring.png"), (0, -22, 12), (0, 0, 4), 1200, lens=28)
-    shoot(scene, cam, os.path.join(out, "ring_low.png"), (3, -12, 1.5), (0, 0, 6), 1200, lens=22)
-    # each pillar alone, front on
-    for o in list(bpy.data.objects):
-        if o.name.startswith("pillar_"):
-            o.hide_render = True
-    for i, (pid, ai, gi) in enumerate(imgs):
-        o = bpy.data.objects[f"pillar_{pid}"]
-        o.hide_render = False
-        c = o.matrix_world @ Vector((0, 0, 0))
-        mesh_center = sum((o.matrix_world @ v.co for v in o.data.vertices), Vector()) / len(o.data.vertices)
-        shoot(scene, cam, os.path.join(out, f"pillar_{pid}.png"), (mesh_center.x * 1.0, mesh_center.y - 12, 4.5),
-              (mesh_center.x, mesh_center.y, 4.2), 800, lens=35)
-        o.hide_render = True
-    # icon
-    o = bpy.data.objects["pillar_death"]
-    o.hide_render = False
-    mc = sum((o.matrix_world @ v.co for v in o.data.vertices), Vector()) / len(o.data.vertices)
-    shoot(scene, cam, os.path.join(assets, "icon.png"), (mc.x + 6, mc.y - 9, 6), (mc.x, mc.y, 4.4), 128, lens=40)
-    o.hide_render = True
     # relic
     build_mesh("relic", rparts, rsize, rai, rgi, Vector((40, 0, 1)))
     shoot(scene, cam, os.path.join(out, "relic.png"), (41.6, -2.2, 2.4), (40, 0, 1.6), 700, lens=50)

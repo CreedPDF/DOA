@@ -18,7 +18,7 @@ def png_size(p):
     return struct.unpack(">II", d[16:24])
 
 
-for name in ("pillar", "relic"):
+for name in ("relic",):
     p = A / f"models/entity/{name}.json"
     if not p.exists():
         errors.append(f"{p.name} missing")
@@ -36,17 +36,25 @@ for name in ("pillar", "relic"):
     print(f"{p.name}: {len(m['cubes'])} cubes, {len(bones)} bones, atlas {m['texture']}")
 
 for pid in IDS:
-    for suffix in ("", "_glow"):
-        p = A / f"textures/entity/pillar/{pid}{suffix}.png"
+    for p in (A / f"textures/entity/pillar/panel_{pid}.png", A / f"textures/entity/pillar/panel_{pid}_glow.png"):
         if not p.exists():
             errors.append(f"{p.name} missing")
-        else:
-            print(p.name, png_size(p))
-    for p in (A / f"effect/seal_{pid}.png", A / f"gui/label/{pid}.png"):
-        q = A / "textures" / p.relative_to(A)
-        if not q.exists():
-            errors.append(f"{q} missing")
-
+for rel in ("models/entity/pillar2.json", "models/entity/pillar_panel.json", "models/item/staff_mesh.json", "models/entity/engine.json",
+            "models/entity/gate.json", "models/space/fragments.json"):
+    p = A / rel
+    if not p.exists():
+        errors.append(f"{rel} missing")
+        continue
+    m = json.loads(p.read_text())
+    for part in m["parts"]:
+        nv = len(part["verts"]) // m["stride"]
+        if part["quads"] and max(part["quads"]) >= nv:
+            errors.append(f"{rel}: part {part['name']} malformed")
+    print(rel, ", ".join(f"{q['name']}:{len(q['quads']) // 4}" for q in m["parts"]))
+for rel in ("textures/entity/pillar/body.png", "textures/entity/pillar/body_glow.png", "textures/item/staff.png", "textures/item/staff_glow.png",
+            "textures/entity/engine.png", "textures/entity/engine_glow.png", "textures/entity/gate.png", "textures/entity/gate_glow.png"):
+    if not (A / rel).exists():
+        errors.append(f"{rel} missing")
 for name in ("planet", "ring"):
     p = A / f"models/space/{name}.json"
     if not p.exists():
@@ -57,7 +65,7 @@ for name in ("planet", "ring"):
     if len(m["verts"]) % 8 or len(m["quads"]) % 4 or max(m["quads"]) >= nv:
         errors.append(f"space mesh {name}.json malformed")
     print(f"{name}.json: {nv} corners, {len(m['quads']) // 4} quads")
-for t in ("earth", "earth_clouds", "earth_night", "moon", "giant", "ring", "milkyway", "glare", "white"):
+for t in ("earth", "earth_clouds", "moon", "red", "red_cracks", "giant", "ring", "milkyway", "galaxy", "deepfield", "glare", "corona", "white"):
     if not (A / f"textures/space/{t}.png").exists():
         errors.append(f"space texture {t}.png missing")
 for pid in IDS:

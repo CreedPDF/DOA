@@ -118,20 +118,23 @@ def kanji(pid, size, cx, cy, seed):
 
 
 def silhouette(cx, base_y, height, seed, sink=0.0):
-    """The pillar seen from below: shaft, bronze bands, three upturned roof tiers and the jewel finial."""
+    """The new pillar seen from below: stepped plinth, tapered obelisk, gold bands, pyramidion, halo ring, crystal."""
     img = Image.new("L", (W, H), 0)
     d = ImageDraw.Draw(img)
-    sw = height * 0.2
-    top = base_y - height
-    d.rectangle([cx - sw * 1.25, base_y - height * 0.06, cx + sw * 1.25, base_y + 40], fill=255)
-    d.rectangle([cx - sw, top + height * 0.25, cx + sw, base_y], fill=255)
-    for k, (yf, wf) in enumerate(((0.25, 1.9), (0.14, 1.5), (0.05, 1.15))):
-        y = top + height * yf
-        w = sw * wf
-        d.polygon([(cx - w * 1.15, y - height * 0.015), (cx - w, y + height * 0.03), (cx + w, y + height * 0.03),
-                   (cx + w * 1.15, y - height * 0.015), (cx + w * 0.55, y - height * 0.06), (cx - w * 0.55, y - height * 0.06)], fill=255)
-    d.rectangle([cx - sw * 0.12, top - height * 0.14, cx + sw * 0.12, top + height * 0.05], fill=255)
-    d.ellipse([cx - sw * 0.3, top - height * 0.08, cx + sw * 0.3, top + height * 0.0], fill=255)
+    u = height / 14.0  # one block
+    top = base_y - 11.0 * u
+    for r, z0, z1 in ((2.05, -0.7, 0.05), (1.75, 0.05, 0.5), (1.42, 0.5, 0.9)):
+        d.rectangle([cx - r * u, base_y - z1 * u, cx + r * u, base_y - z0 * u + 30], fill=255)
+    d.polygon([(cx - 0.85 * u, base_y - 0.9 * u), (cx + 0.85 * u, base_y - 0.9 * u), (cx + 0.6 * u, top), (cx - 0.6 * u, top)], fill=255)
+    for z in (1.25, 5.9, 10.5):
+        w = 0.85 + (0.6 - 0.85) * (z - 0.9) / 10.1 + 0.07
+        d.rectangle([cx - w * u, base_y - (z + 0.13) * u, cx + w * u, base_y - (z - 0.13) * u], fill=255)
+    d.polygon([(cx - 0.65 * u, top), (cx + 0.65 * u, top), (cx, top - 1.5 * u)], fill=255)
+    ry = base_y - 8.3 * u
+    d.ellipse([cx - 2.25 * u, ry - 0.42 * u, cx + 2.25 * u, ry + 0.42 * u], outline=255, width=max(2, int(0.14 * u)))
+    d.ellipse([cx - 1.75 * u, ry - 0.3 * u, cx + 1.75 * u, ry + 0.3 * u], outline=255, width=max(2, int(0.1 * u)))
+    cy = base_y - 13.3 * u
+    d.polygon([(cx, cy - 0.9 * u), (cx + 0.38 * u, cy), (cx, cy + 0.55 * u), (cx - 0.38 * u, cy)], fill=255)
     return rough(np.asarray(img) > 0, seed, 0.3, 4)
 
 
@@ -216,7 +219,7 @@ def frames(pid, idx):
     img = np.ones((H, W, 3)) * INK[None, None]
     img = img + noise(H, W, 30, s + 10, 3)[..., None] * dark[None, None] * 0.8
     img = comp(img, None, col, speed_strokes(cx2, H * 0.98, s + 11, 140, 0.05) * 0.95)
-    sil = silhouette(cx2, H * 0.98, H * 1.05, s + 12)
+    sil = silhouette(cx2, H * 0.98, H * 1.15, s + 12)
     glow = np.clip(ndimage.gaussian_filter(sil, 10) * 2.2 - sil, 0, 1)
     img = comp(img, None, col * 0.7 + 0.3, glow * 0.85)
     img = comp(img, None, INK, sil)
@@ -232,23 +235,28 @@ def frames(pid, idx):
     ground = rough(YY > gy + 6 * np.sin(XX / 37.0) + 10 * noise(H, W, 40, s + 22, 2), s + 23, 0.3, 5)
     img = comp(img, None, INK * 0.5 + dark * 0.5, ground)
     img = comp(img, None, INK, cracks(cx3, gy, s + 24, 16, 380, 7) * ground)
-    img = comp(img, None, INK, silhouette(cx3, gy + 4, H * 0.72, s + 25))
+    img = comp(img, None, INK, silhouette(cx3, gy + 4, H * 0.8, s + 25))
     rocks = splatter(s + 26, 40, cx3, gy - 30, 0.9, (3, 14))
     img = comp(img, None, INK, rocks * (YY < gy + 20))
     img = comp(img, None, PAPER, speed_strokes(cx3, gy, s + 27, 40, 0.5) * 0.5 * (YY < gy))
     out.append(img)
 
-    # 3 SHATTER
-    cx4, cy4 = W / 2 + rr.uniform(-100, 100), H / 2 + rr.uniform(-40, 40)
-    img = np.ones((H, W, 3)) * INK[None, None] + noise(H, W, 16, s + 30, 3)[..., None] * 0.05
-    cr = cracks(cx4, cy4, s + 31, 22, 520, 9)
-    bleed = np.clip(ndimage.gaussian_filter(cr, 5) * 3, 0, 1)
-    img = comp(img, None, col * 0.9, bleed * 0.75)
-    img = comp(img, None, col * 0.4 + 0.6, cr)
-    ghost = kanji(pid, 380, cx4, cy4, s + 32)
-    img = comp(img, None, col * 0.55, ghost * 0.55)
-    img = comp(img, None, PAPER, splatter(s + 33, 20, cx4, cy4, 1.3, (1, 5)))
-    img = comp(img, None, col, torn_border(s + 34, 12) * 0.9)
+    # 3 BLAST - the shockwave tearing outward: a thick brushed ring of the pillar's colour bursting across the
+    # frame, the pillar standing in negative space at its heart, ink thrown off the ring's edge
+    cx4, cy4 = W / 2 + rr.uniform(-60, 60), H * 0.62
+    img = np.ones((H, W, 3)) * INK[None, None] + noise(H, W, 18, s + 30, 3)[..., None] * dark[None, None] * 0.6
+    ring_outer = enso(cx4, cy4, H * 0.62, s + 31, 70)
+    ring_inner = enso(cx4, cy4, H * 0.38, s + 35, 34)
+    img = comp(img, None, col, np.clip(ring_outer * 1.1, 0, 1))
+    img = comp(img, None, col * 0.5 + 0.5, ring_inner * 0.9)
+    a_, rn, _ = polar(cx4, cy4)
+    img = comp(img, None, col * 0.8, speed_strokes(cx4, cy4, s + 32, 70, 0.55) * 0.7)
+    img = comp(img, None, INK, splatter(s + 33, 34, cx4, cy4, 1.5, (3, 16)) * (ring_outer > 0.2))
+    sil = silhouette(cx4, cy4 + 60, H * 0.72, s + 34)
+    halo = np.clip(ndimage.gaussian_filter(sil, 8) * 2.5 - sil, 0, 1)
+    img = comp(img, None, PAPER, halo * 0.9)
+    img = comp(img, None, INK * 0.4 + col * 0.12, sil)
+    img = comp(img, None, INK, torn_border(s + 36, 16))
     out.append(img)
     return out
 
