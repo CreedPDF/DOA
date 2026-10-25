@@ -20,7 +20,7 @@ import static com.creedpdf.doa.client.fx.Fx.spawn;
 
 /** Particles, impact frames, shake and the private sounds of each ability. */
 public final class AbilityFx {
-    private static final float[] INK = {0.02f, 0.015f, 0.02f};
+    private static final float[] INK_C = {0.02f, 0.015f, 0.02f};
     private static final float[] STONE = {0.16f, 0.15f, 0.15f};
 
     private AbilityFx() {
@@ -62,7 +62,7 @@ public final class AbilityFx {
             spawn(MOTE, p.x, p.y, p.z, Math.cos(a) * s, rnd.nextDouble() * speed, Math.sin(a) * s, bright(c, rnd.nextFloat() * 0.4f), 1f,
                     0.14f + rnd.nextFloat() * 0.2f, 20 + rnd.nextInt(25), 0.004f, 0.92f, true, 0, -0.4f, 0);
             if (ink && k % 2 == 0)
-                spawn(INK, p.x, p.y, p.z, Math.cos(a) * s * 0.6, 0.03, Math.sin(a) * s * 0.6, INK, 0.8f, 0.7f + rnd.nextFloat() * 0.6f,
+                spawn(INK, p.x, p.y, p.z, Math.cos(a) * s * 0.6, 0.03, Math.sin(a) * s * 0.6, INK_C, 0.8f, 0.7f + rnd.nextFloat() * 0.6f,
                         30 + rnd.nextInt(20), -0.002f, 0.9f, false, 0.04f, 1.4f, 0);
         }
     }
@@ -218,7 +218,7 @@ public final class AbilityFx {
                         Vec3d tang = d.crossProduct(new Vec3d(0, 1, 0)).normalize().multiply(0.25);
                         Vec3d v = d.multiply(-0.05).add(tang);
                         if (n % 2 == 0)
-                            spawn(INK, p.x + d.x, p.y + d.y, p.z + d.z, v.x, v.y, v.z, INK, 0.8f, 0.6f, 30, 0, 1f, false, 0.05f, -0.6f, 0);
+                            spawn(INK, p.x + d.x, p.y + d.y, p.z + d.z, v.x, v.y, v.z, INK_C, 0.8f, 0.6f, 30, 0, 1f, false, 0.05f, -0.6f, 0);
                         else
                             spawn(MOTE, p.x + d.x, p.y + d.y, p.z + d.z, v.x, v.y, v.z, bright(col, 0.3f), 1f, 0.16f, 30, 0, 1f, true, 0, -0.6f, 0);
                     }
