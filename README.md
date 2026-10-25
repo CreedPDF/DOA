@@ -1,31 +1,29 @@
 # DOA — Delux's Orbital Armory
 
-Fabric 1.21.1 mod. Use the **Talisman of Summoning** (召) and the orbital armory answers:
+Fabric 1.21.1 mod. Hold use with the **Staff of the Orbital Armory** to charge it, and the armory answers:
 
 1. A temple bell tolls from the heavens and the cutscene begins.
-2. Seven black, ancient pillars fall one by one into a circle around you (clockwise from north). Each one gets its own low-angle shot and a rugged, hand-inked impact frame in its colour as it lands. Then its name lights up above it:
-   死 Death (crimson) · 贖 Redemption (gold) · 怒 Wrath (ember) · 魂 Soul (jade) · 運 Fate (violet) · 静 Silence (ivory) · 虚 Void (sakura)
-3. A ring of light binds the seven pillars. A black core orb forms, ink corruption spreads over the ground, and an opaque dark sphere rises with a burning, ragged rim until it closes over you. Its wall is solid: nothing gets in.
-4. The ground inside turns to black ink stone (put back exactly as it was when the seal breaks), and each pillar releases its relic.
-5. Look at a relic and use the talisman to awaken it. Each has its own cutscene and impact frames:
-   - 死 **Verdict of Death**: every hostile within 64 blocks is branded with a crimson seal, then executed by falling ink blades.
-   - 贖 **Absolution**: the dome's crown opens and a shaft of golden light heals you fully, cleanses debuffs and grants Regeneration II, Absorption IV, Resistance II and Fire Resistance.
-   - 怒 **Heaven's Wrath**: a burning gate opens in the sky and 30 spears of fire rain on enemies around the armory (explosions that don't break blocks).
-   - 魂 **Soul Harvest**: jade soul threads drain every nearby hostile and pour into you: healing, Strength II, Speed II.
-   - 運 **Alignment of Fate**: you rise into space. A living planet with clouds, city lights and atmosphere, its moon, a ringed gas giant, the sun and the Milky Way. The seven stars align and fire, and a pillar of starlight strikes the strongest enemy (50 damage, clears the weather, grants Luck, Strength, Haste, Hero of the Village).
-   - 静 **Bell of Silence**: a great bell tolls and every mob within 64 blocks freezes in place for 10 seconds.
-   - 虚 **The Void Maw**: a singularity opens outside the sphere, drags enemies in and collapses.
-   Each relic rests after use (45 s to 2 min).
-6. Sneak + use the talisman to break the seal. The sphere sinks and the pillars return to the heavens.
+2. Seven pillars appear one after another as flickering stars high in the sky, then plunge to earth in under half a second, landing in a wide circle (13 blocks out). Each one has its own shot, a hand-inked impact frame in its colour, and its name written above it in DOA's own lettering:
+   死 Death · 贖 Redemption · 怒 Wrath · 魂 Soul · 運 Fate · 静 Silence · 虚 Void
+3. A ring of light binds them, a black core orb forms, ink spreads over the ground and turns it to black ink stone, and an opaque dark sphere (22 blocks across the radius) rises and closes. Its wall is solid; nothing gets in.
+4. Each pillar releases a relic. Look at one and use the staff to awaken its move (sneak + use breaks the seal):
+   - 死 **Eclipse**: the moon swallows the sun; at totality the black sun's crimson light executes every enemy in turn.
+   - 贖 **Dawn**: up through the clouds to a sunrise sea of cloud; a colossal halo gate pours heaven's light down into the sphere. Full heal, cleanse, Regeneration, Absorption, Resistance; the undead burn.
+   - 怒 **Planetbreaker**: up into orbit; the pillars forge a spear of light that breaks a red planet apart; its burning pieces fall as meteors on your enemies.
+   - 魂 **Heart of the World**: down a shaft through every layer of the earth to the Heart Engine at the core, which drains your enemies' souls and gives you their strength.
+   - 運 **Beyond**: out past the planet, the solar system and the Milky Way to the cosmic web, where the seven stars align, then a rush back down as the light of the universe strikes.
+   - 静 **Moonrise**: night falls, a colossal moon rises and everything around you freezes for 30 seconds.
+   - 虚 **Rift**: the sky tears open into space and your enemies are pulled up through the rifts.
 
-Recipe: gold ingot on top, then paper / eye of ender / paper, then redstone on the bottom.
+Recipe: gold ingot, eye of ender, gold ingot on top, blaze rods down the middle.
 
 ## Build
 Everything is built in GitHub Actions:
-- `tools/blender/doa_models.py` builds the pillar and relic models, their atlases and glow maps in headless Blender, and renders preview images into `docs/renders`.
+- `tools/blender/doa_meshes.py` models and bakes (in headless Blender) the pillar, staff, Heart Engine, halo gate and shattered-planet fragments, and renders the deep-space panorama; `tools/blender/doa_models.py` builds the relic and the planet meshes. Previews go to `docs/renders`.
 - `tools/textures/doa_textures.py` makes the VFX, GUI and item textures.
 - `tools/textures/glyphs.py` makes the brushed kanji masks.
 - `tools/textures/impact_frames.py` paints the 28 hand-inked impact frames (four per pillar).
-- `tools/textures/space_textures.py` paints the planets, clouds, city lights, rings, Milky Way and sun glare. Blender builds the planet and ring meshes and renders `docs/renders/space.png`.
+- `tools/textures/space_textures.py` paints and bakes the lighting of the planets (Earth, moon, red planet, ringed giant), plus the Milky Way, a spiral galaxy, the cosmic web, the sun's glare and the eclipse corona.
+- `tools/textures/doa_scenes.py` paints the pillar panels, clouds, the layers of the earth and other scene textures; `tools/textures/doa_font.py` builds DOA's lettering.
 - `tools/sfx/doa_sounds.py` synthesizes every sound from scratch: bonsho temple bell, taiko, hyoshigi, shakuhachi, koto in the hirajoshi scale, furin chimes, and a monk drone, all in a stone-hall reverb.
 - Gradle builds the jar, and each push to `main` publishes a release.
