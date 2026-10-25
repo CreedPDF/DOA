@@ -1,0 +1,101 @@
+{
+  "call": {
+    "subtitle": "subtitles.doa.call",
+    "sounds": [
+      {
+        "name": "doa:call",
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "descend": {
+    "subtitle": "subtitles.doa.descend",
+    "sounds": [
+      {
+        "name": "doa:descend",
+        "attenuation_distance": 160
+      }
+    ]
+  },
+  "impact": {
+    "subtitle": "subtitles.doa.impact",
+    "sounds": [
+      {
+        "name": "doa:impact",
+        "attenuation_distance": 160
+      }
+    ]
+  },
+  "reveal": {
+    "subtitle": "subtitles.doa.reveal",
+    "sounds": [
+      {
+        "name": "doa:reveal",
+        "attenuation_distance": 48
+      }
+    ]
+  },
+  "seal": {
+    "subtitle": "subtitles.doa.seal",
+    "sounds": [
+      {
+        "name": "doa:seal",
+        "attenuation_distance": 48
+      }
+    ]
+  },
+  "orb_rise": {
+    "subtitle": "subtitles.doa.orb_rise",
+    "sounds": [
+      {
+        "name": "doa:orb_rise",
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "orb_close": {
+    "subtitle": "subtitles.doa.orb_close",
+    "sounds": [
+      {
+        "name": "doa:orb_close",
+        "attenuation_distance": 128
+      }
+    ]
+  },
+  "orb_hum": {
+    "subtitle": "subtitles.doa.orb_hum",
+    "sounds": [
+      {
+        "name": "doa:orb_hum",
+        "attenuation_distance": 32
+      }
+    ]
+  },
+  "dissolve": {
+    "subtitle": "subtitles.doa.dissolve",
+    "sounds": [
+      {
+        "name": "doa:dissolve",
+        "attenuation_distance": 96
+      }
+    ]
+  },
+  "ascend": {
+    "subtitle": "subtitles.doa.ascend",
+    "sounds": [
+      {
+        "name": "doa:ascend",
+        "attenuation_distance": 128
+      }
+    ]
+  },
+  "relic": {
+    "subtitle": "subtitles.doa.relic",
+    "sounds": [
+      {
+        "name": "doa:relic",
+        "attenuation_distance": 32
+      }
+    ]
+  }
+}

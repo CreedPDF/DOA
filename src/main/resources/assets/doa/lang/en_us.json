@@ -1,0 +1,23 @@
+{
+  "item.doa.summon_talisman": "Talisman of Summoning",
+  "item.doa.summon_talisman.tip1": "召  Calls down the Orbital Armory",
+  "item.doa.summon_talisman.tip2": "Use to summon the seven pillars. Use again within the sealed sphere to release them.",
+  "item.doa.summon_talisman.tip3": "Death, Redemption, Wrath, Soul, Fate, Silence, Void.",
+  "block.doa.orb_shell": "Wall of the Dark Sphere",
+  "entity.doa.armory_core": "Orbital Armory",
+  "message.doa.call": "召  The Orbital Armory answers...",
+  "message.doa.in_progress": "The rite is not yet complete.",
+  "message.doa.release": "The seal is broken. The pillars return to the heavens.",
+  "message.doa.releasing": "The pillars are already returning.",
+  "subtitles.doa.call": "A temple bell tolls from the heavens",
+  "subtitles.doa.descend": "A pillar falls from the sky",
+  "subtitles.doa.impact": "A pillar strikes the earth",
+  "subtitles.doa.reveal": "A name is spoken",
+  "subtitles.doa.seal": "A seal is drawn",
+  "subtitles.doa.orb_rise": "Darkness rises",
+  "subtitles.doa.orb_close": "The dark sphere seals",
+  "subtitles.doa.orb_hum": "The dark sphere hums",
+  "subtitles.doa.dissolve": "The dark sphere fades",
+  "subtitles.doa.ascend": "The pillars return to the heavens",
+  "subtitles.doa.relic": "A relic awakens"
+}
