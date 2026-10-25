@@ -5,13 +5,17 @@ package com.creedpdf.doa;
  * (models, VFX, camera). Everything is a pure function of the rite's tick counter so every viewer sees the same thing.
  */
 public final class Rite {
-    public static final double PILLAR_RADIUS = 8.0;
-    public static final double ORB_RADIUS = 15.0;
-    public static final double FALL_HEIGHT = 110.0;
+    public static final double PILLAR_RADIUS = 13.0;
+    public static final double ORB_RADIUS = 22.0;
+    /** How high the falling star hangs before it plunges (so far up it reads as a star). */
+    public static final double FALL_HEIGHT = 320.0;
 
     public static final int LEAD = 40;
-    public static final int SLOT = 40;
-    public static final int FALL = 26;
+    public static final int SLOT = 36;
+    /** Ticks a pillar spends as a flickering star before it plunges, then the plunge itself. */
+    public static final int STAR = 26;
+    public static final int PLUNGE = 8;
+    public static final int FALL = STAR + PLUNGE;
 
     public static final int LAST_LAND = land(Pillars.COUNT - 1);
     public static final int SEAL = LAST_LAND + 24;
@@ -70,10 +74,21 @@ public final class Rite {
         return 1 - k * k * k;
     }
 
-    /** Height of pillar i above its landing point (accelerating plunge). */
+    /** Height of pillar i above its landing point: hanging as a star, then a near-instant plunge. */
     public static double fallHeight(int i, double t) {
-        float p = clamp01((t - spawn(i)) / FALL);
-        return FALL_HEIGHT * (1 - p * p);
+        double u = t - spawn(i);
+        if (u < STAR) return FALL_HEIGHT - 30 * clamp01(u / STAR);
+        float p = clamp01((u - STAR) / PLUNGE);
+        return (FALL_HEIGHT - 30) * (1 - p * p * p);
+    }
+
+    /** 0..1 progress through the plunge (0 while still a star). */
+    public static float plunge(int i, double t) {
+        return clamp01((t - spawn(i) - STAR) / PLUNGE);
+    }
+
+    public static boolean starPhase(int i, double t) {
+        return t >= spawn(i) && t < spawn(i) + STAR;
     }
 
     public static boolean visible(int i, double t) {
@@ -123,7 +138,7 @@ public final class Rite {
 
     /** Elevation (degrees) of the dome's corrupted rim at angle theta. */
     public static double domeEdge(double theta, float p, double t) {
-        double jag = 16;
+        double jag = 14;
         double e = p * (90 + jag) - jag * edgeNoise(theta, t);
         return Math.max(0, Math.min(90, e));
     }

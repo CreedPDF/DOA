@@ -278,9 +278,9 @@ def tamtam(d, f0=62):
 
 
 def s_descend():
-    # 1.3 s from the armory to the earth: everything swells into the moment of impact
-    d = 1.75
-    hit = 1.3
+    # 1.7 s from the armory to the earth: a far star's shimmer, then a dive that swells into the moment of impact
+    d = 2.15
+    hit = 1.7
     out = canvas(d)
     # the reed's cry, sliding down from the heavens
     cry = hichiriki(lambda t: note(17) * 2 ** (-(np.clip(t / hit, 0, 1) ** 1.6) * 1.0), hit + 0.08)
@@ -299,6 +299,9 @@ def s_descend():
         put(out, taiko(70 + k * 1.5, 0.6, 0.5 + 0.6 * tt / hit), tt, 0.25 + 0.55 * (tt / hit) ** 2)
         tt += 0.22 * (1 - tt / hit) + 0.035
         k += 1
+    # the star's shimmer: high glassy bells trembling before the dive
+    for k in range(9):
+        put(out, singing_bowl(note(36 + (k % 3) * 5), 1.0) * 0.6, k * 0.12, 0.25)
     # wooden clapper crack right at the moment it plants
     put(out, hyoshigi(0.45), hit - 0.02, 0.9)
     return hall(out, 0.9, 0.3)

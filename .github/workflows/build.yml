@@ -51,7 +51,7 @@ jobs:
       - name: Report Blender errors
         if: failure() && steps.blender.outcome == 'failure'
         run: |
-          msg=$(tail -n 60 blender.log | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+          msg=$(grep -v '^Fra:' blender.log | grep -E -B2 -A12 'Traceback|Error|error:|Exception' | tail -n 80 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
           echo "::error title=Blender::$msg"
 
       - name: Validate assets
